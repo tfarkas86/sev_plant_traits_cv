@@ -134,7 +134,7 @@ brl_transform <- function(x, # a tibble or data frame with trait data
   
   names(pic.pagel) <- paste("Pagel: lambda = ", lambdas, sep="")
   
-  # Grafen transformations
+  # Grafen "transformations"
   rhos <- seq(.1, 1, by=.1)
   
   pic.grafen <- lapply(rhos, function(p) {
@@ -166,6 +166,7 @@ phy <- read.tree("Data/sev_traits_tree101.tre")
 
 # test single pic function
 pics(x=all_traits, trait=trait, phy=read.tree("Data/sev_traits_tree101.tre"), taxa="taxon.new")
+
 # test branch length transformation function
 pics.ldmc <- brl_transform(x=all_traits, trait=trait, phy=read.tree("Data/sev_traits_tree101.tre"), taxa = "taxon.new")
 
