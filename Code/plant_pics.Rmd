@@ -184,7 +184,7 @@ trait_names <- all_traits %>%
   names()
 
 # loop through names to create diagnostic transformation plots
-for(trait in trait_names) {
+for(trait in trait_names[20]) {
   
   print(trait)
   
@@ -195,21 +195,32 @@ for(trait in trait_names) {
   
   # bind to single data frame
   trait.pics.df <- do.call(rbind, trait_pics) %>%
+    # filter(!grepl("power", .$trans)) %>% # Pagel only
     mutate(pic_abs = abs(contrasts), 
            pic_sd = sqrt(variance)) %>%
     select(pic = contrasts, pic_abs, var=variance, pic_sd, trans)
+  
+  # get correlations
+  trait.cors <- trait.pics.df %>%
+    group_by(trans) %>%
+    summarize(cor=round(cor(pic_abs, pic_sd), 2))
   
   # create diagnostic plot
 
   trait.pics.df %>%
     ggplot(aes(x=pic_abs, y=pic_sd)) +
     geom_point() +
-    facet_wrap(~ trans, scales = "free") 
+    facet_wrap(~ trans, scales = "free") + 
+    geom_text(data = trait.cors, aes(x=Inf, y=Inf, 
+                                     label=paste("r = ", trait.cors$cor, sep="")
+                                      ,vjust=1, hjust=1
+                                     ),
+              cex = 3, col="red")
   
   # write to disk
   ggsave(filename = paste("Figures/pic_trans_diagnostics_", trait, ".pdf", 
                           sep=""),
-         device="pdf")
+         device="pdf", height = 14, width=14)
   
 }
 
