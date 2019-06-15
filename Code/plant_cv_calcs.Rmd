@@ -1,0 +1,111 @@
+---
+title: "R Notebook"
+output: html_notebook
+editor_options: 
+  chunk_output_type: inline
+---
+
+
+##### Biomass and CV
+```{r Input/Modify/Explore Raw Biomass Data}
+## Input raw data
+ab.raw <- read_csv("~/Dropbox/Projects/Sev/Plants/Data/Biomass/Sevilleta_allbiomass_28Jan2018.csv")
+
+## modify data
+ab <- ab.raw %>%
+  filter(substr(site, 1, 4) == "core", treatment == "C") %>%
+  mutate_at(vars(year), funs(paste("y", year, sep=""))) %>%
+  mutate_at(vars(kartez), funs(ifelse(. %in% c("ARDI5", "ARPU9"), "ARIST", 
+                                      ifelse(. %in% c("SPCO4", "SPFL", "SPCR"),
+                                             "SPORO", ifelse(. == "OESU3", "GACO5", 
+                                                             ifelse(. == "OESUN", "GASUN", 
+                                                                    ifelse(. == "DYGR", "CHGR2", 
+                                                                           ifelse(. %in% c("ASFE2", "ASNU4", "ASTRA"), "ASTRA", .)))))))) %>%
+  mutate_at(vars(site, year, season, web:kartez, treatment), funs(as.factor(.))) %>%
+  mutate_at(vars(site), 
+            funs(fct_recode(., "G" = "core_black", "C" = "core_creosote", 
+                            "B" = "core_blue", "P" = "core_PJ" ))) %>%
+  mutate_at(vars(season), 
+            funs(fct_recode(., "F" = "fall", "S" = "spring"))) %>%
+  select(site:kartez, -treatment, -block, -subplot, biomass.BM:biomass.BIM) %>%
+  droplevels()
+```
+
+```{r Biomass Exploration}
+## raw data xploration
+
+levels(ab$kartez)
+
+## match with traits species
+sp.raw <- read_csv("~/Dropbox/Projects/Sev/Plants/Data/All Traits/sev_all_traits_Nov2018.csv") %>% 
+  mutate_at(vars(kartez), funs(as_factor(.)))
+
+quad.raw <- read_csv("~/Dropbox/Projects/Sev/Plants/Data/Biomass/NPP_quad_20181105.csv") %>% 
+  mutate_at(vars(Species), funs(as_factor(.)))
+
+# missing 35 species from biomass file, but not from quad data
+# probably a bug in the allometry code, but not sure
+intersect(sp.raw$kartez, levels(ab$kartez))
+setdiff(sp.raw$kartez, levels(ab$kartez))
+setdiff(levels(ab$kartez), sp.raw$kartez)
+setdiff(sp.raw$kartez, levels(quad.raw$Species))
+setdiff(levels(quad.raw$Species), sp.raw$kartez)
+```
+
+```{r Make CV data}
+temp_cv <- ab %>%
+  group_by(site, year, season, kartez) %>%
+  summarize(density_BM = sum(biomass.BM) / n(),
+            density_BIM = sum(biomass.BIM) / n()) %>%
+  complete(kartez, nesting(year, season, site), fill=list(density_BM = 0, 
+                                                          density_BIM = 0)) %>%
+  ungroup() %>% group_by(site, season, kartez) %>%
+  summarize(cv_BM = sd(density_BM)/mean(density_BM),
+            cv_BIM = sd(density_BIM)/mean(density_BIM)) %>%
+  ungroup() %>%
+  replace(is.na(.), NA) %>%
+  gather(key = "cv_type", value = "density", starts_with("cv")) %>%
+  unite(col = season_site_cv, season, site, cv_type, sep=".") %>%
+  spread(key=season_site_cv, value=density) %>%
+  rowwise() %>%
+  mutate(# Fall Flats only average, Fall All sites average
+    F.F.cv_BIM = mean(c(F.B.cv_BIM, F.C.cv_BIM, F.G.cv_BIM), na.rm=TRUE),
+    F.F.cv_BM = mean(c(F.B.cv_BM, F.C.cv_BM, F.G.cv_BM), na.rm=TRUE),
+    F.A.cv_BIM = mean(c(F.B.cv_BIM, F.C.cv_BIM, F.G.cv_BIM, F.P.cv_BIM),
+                      na.rm=TRUE),
+    F.A.cv_BM = mean(c(F.B.cv_BM, F.C.cv_BM, F.G.cv_BM, F.P.cv_BM),
+                     na.rm=TRUE),
+    # Spring
+    S.F.cv_BIM = mean(c(S.B.cv_BIM, S.C.cv_BIM, S.G.cv_BIM), na.rm=TRUE),
+    S.F.cv_BM = mean(c(S.B.cv_BM, S.C.cv_BM, S.G.cv_BM), na.rm=TRUE),
+    S.A.cv_BIM = mean(c(S.B.cv_BIM, S.C.cv_BIM, S.G.cv_BIM, S.P.cv_BIM),
+                      na.rm=TRUE),
+    S.A.cv_BM = mean(c(S.B.cv_BM, S.C.cv_BM, S.G.cv_BM, S.P.cv_BM),
+                     na.rm=TRUE))
+
+save(temp_cv, file="~/Dropbox/Projects/Sev/Plants/Data/Biomass/sev_plant_CV.RData")
+```
+
+
+```{r Old NPP Prelim}
+npp.raw <- read_excel(path="~/Dropbox/Projects/Sev/Plants/Data/Biomass/Jen's CV Files/NPPCV.xlsx", 
+                      na=c("", "NA"))
+npp <- npp.raw %>%
+  filter(season %in% 3 & is.sp) %>% # both seaons, exclude trait-group summaries
+  
+  # make data wide format -- one row per species 
+  as.data.table() %>%
+  dcast(form = kartez + family + genus + species + path + a_p + g_f + apgf + native ~ biome,
+        value.var= c("sum_t", "mean_t", "SD_t", "CV_t", "mean_s", "SD_s", "CV_s"),
+        fill=0) %>%
+  as.tibble() %>%
+  mutate_at(vars(family, path:native ), as.factor) %>%
+  
+  # add CV data averaging across sites for all sites and flats only
+  rowwise() %>% mutate(CV_t_all=mean(c(CV_t_B, CV_t_C, CV_t_G, CV_t_P)),
+                       CV_t_flats=mean(c(CV_t_B, CV_t_C, CV_t_G))) %>%
+  rowwise() %>% mutate(sum_t_all=sum(c(sum_t_B, sum_t_C, sum_t_G, sum_t_P)),
+                       sum_t_flats=sum(c(sum_t_B, sum_t_C, sum_t_G))) %>%
+  arrange(genus, species) # sort the tibble
+
+```
