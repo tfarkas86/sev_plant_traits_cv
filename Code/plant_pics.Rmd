@@ -95,7 +95,8 @@ pics <- function(x, # a tibble or data frame with trait data
     pic.out <- pic(x = set_names(traits[[1]], rownames(traits)), 
                    phy = pruned, 
                    scaled = scale, 
-                   var.contrasts = TRUE) %>%
+                   var.contrasts = TRUE)
+    pic.out <- pic.out %>%
       as_tibble() %>%
       mutate(node = rownames(pic.out)) %>%
       mutate(pic_abs = abs(contrasts), 
@@ -136,23 +137,25 @@ brl_transform <- function(x, # a tibble or data frame with trait data
     phy.pagel <- rescale(x=phy, model="lambda", l)
     pics(x=x, trait=trait, phy=phy.pagel, taxa=taxa, scale=scale) %>%
       as_tibble() %>%
-      mutate(trans = paste("lambda = ", l, sep=""))
+      mutate(trans = paste("Pagel: lambda = ", l, sep=""))
     
   }) 
   
-  names(pic.pagel) <- paste("lambda = ", lambdas, sep="")
+  names(pic.pagel) <- paste("Pagel: lambda = ", lambdas, sep="")
   
   # Grafen transformations
-  rhos <- c(seq(.1, 1, by=.1), seq(1.5, 10, by=.5))
+  rhos <- seq(.1, 1, by=.1)
   
   pic.grafen <- lapply(rhos, function(p) {
     
     phy.grafen <- compute.brlen(phy=phy, power=p)
     pics(x=x, trait=trait, phy=phy.grafen, taxa=taxa, scale=scale) %>%
       as_tibble() %>%
-      mutate(trans = paste("power = ", p, sep=""))
+      mutate(trans = paste("Grafen: power = ", p, sep=""))
     
   }) 
+  
+  names(pic.grafen) <- paste("Grafen: power = ", lambdas, sep="")
   
   # combine into one list
   pics.out <- c(pic.raw=pic.raw, pic.all1=pic.all1, pic.pagel, pic.grafen)
@@ -197,19 +200,19 @@ for(trait in trait_names) {
                               phy=read.tree("Data/sev_traits_tree101.tre"))
   
   # bind to single data frame
-  trait.pics.df <- do.call(rbind, trait_pics) %>%
+  trait.pics.df <- do.call(rbind, trait_pics) 
     # filter(!grepl("power", .$trans)) %>% # Pagel only
    
   
   # get correlations
   trait.cors <- trait.pics.df %>%
     group_by(trans) %>%
-    summarize(cor=round(cor(pic_abs, pic_sd), 2))
+    summarize(cor=round(cor(pic_abs, sd), 2))
   
   # create diagnostic plot
 
   trait.pics.df %>%
-    ggplot(aes(x=pic_abs, y=pic_sd)) +
+    ggplot(aes(x=pic_abs, y=sd)) +
     geom_point() +
     facet_wrap(~ trans, scales = "free") + 
     geom_text(data = trait.cors, aes(x=Inf, y=Inf, 
