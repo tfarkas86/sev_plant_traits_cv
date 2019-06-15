@@ -51,12 +51,6 @@ pics() function takes x = a data frame, cols = a character vector of column name
 
 ```{r Single Trait Pics Function}
 
-x <- all_traits %>%
-  select(taxon.new, ldmc)
-trait <- "ldmc"
-taxa="taxon.new"
-phy <- read.tree("Data/sev_traits_tree101.tre")
-
 pics <- function(x, # a tibble or data frame with trait data
                  trait, # a character string of a single trait column name
                  phy, # a phylogenetic tree of class "phylo" & order "cladewise"
@@ -107,7 +101,7 @@ pics <- function(x, # a tibble or data frame with trait data
     
 }
 
-pics(x=x, trait="ldmc", phy=read.tree("Data/sev_traits_tree101.tre"), taxa="taxon.new")
+
 ```
 
 ```{r Find Transformation}
@@ -126,7 +120,7 @@ brl_transform <- function(x, # a tibble or data frame with trait data
                     mutate(trans = "raw"))
   
   # All equal
-  pic.all1 <- list(pics(x=x, trait=trait, phy=compute.brlen(phy=pruned, runif, min=0, max=1), 
+  pic.all1 <- list(pics(x=x, trait=trait, phy=compute.brlen(phy=phy, runif, min=0, max=1), 
                         taxa=taxa, scale=scale) %>%
                      as_tibble() %>%
                      mutate(trans="all1"))
@@ -136,8 +130,8 @@ brl_transform <- function(x, # a tibble or data frame with trait data
   
   pic.pagel <- lapply(lambdas, function(l) {
     
-    phy.rscl <- rescale(x=phy, model="lambda", l)
-    pics(x=x, trait=trait, phy=phy.rscl, taxa=taxa, scale=scale) %>%
+    phy.pagel <- rescale(x=phy, model="lambda", l)
+    pics(x=x, trait=trait, phy=phy.pagel, taxa=taxa, scale=scale) %>%
       as_tibble() %>%
       mutate(trans = paste("lambda = ", l, sep=""))
     
@@ -145,34 +139,79 @@ brl_transform <- function(x, # a tibble or data frame with trait data
   
   names(pic.pagel) <- paste("lambda = ", lambdas, sep="")
   
+  # Grafen transformations
+  rhos <- c(seq(.1, 1, by=.1), seq(1.5, 10, by=.5))
+  
+  pic.grafen <- lapply(rhos, function(p) {
+    
+    phy.grafen <- compute.brlen(phy=phy, power=p)
+    pics(x=x, trait=trait, phy=phy.grafen, taxa=taxa, scale=scale) %>%
+      as_tibble() %>%
+      mutate(trans = paste("power = ", p, sep=""))
+    
+  }) 
+  
   # combine into one list
-  pics.out <- c(pic.raw=pic.raw, pic.all1=pic.all1, pic.pagel)
+  pics.out <- c(pic.raw=pic.raw, pic.all1=pic.all1, pic.pagel, pic.grafen)
   
   return(pics.out)
   
 }
 
-pics.ldmc <- brl_transform(x=x, trait="ldmc", phy=read.tree("Data/sev_traits_tree101.tre"), taxa = "taxon.new")
 
 ```
 
+```{r Function Testing}
+x <- all_traits %>%
+  select(taxon.new, ldmc)
+trait <- "ldmc"
+taxa="taxon.new"
+phy <- read.tree("Data/sev_traits_tree101.tre")
+
+# test single pic function
+pics(x=all_traits, trait=trait, phy=read.tree("Data/sev_traits_tree101.tre"), taxa="taxon.new")
+# test branch length transformation function
+pics.ldmc <- brl_transform(x=all_traits, trait=trait, phy=read.tree("Data/sev_traits_tree101.tre"), taxa = "taxon.new")
+
+```
+
+
 ```{r Visualize Transformations}
 
-pics.ldmc.df <- do.call(rbind, pics.ldmc) %>%
-  mutate(pic_abs = abs(contrasts), 
-         pic_sd = sqrt(variance)) %>%
-  select(pic = contrasts, pic_abs, var=variance, pic_sd, trans)
+# get all trait names
+trait_names <- all_traits %>%
+  select(a_p:seed_mass) %>%
+  names()
 
-pdf(file = paste("Figures/", "pic_transformations_ldmc.pdf"))
+# loop through names to create diagnostic transformation plots
+for(trait in trait_names) {
+  
+  print(trait)
+  
+  # get pics for all transformations
+  trait_pics <- brl_transform(x=all_traits, trait=trait, 
+                              taxa = "taxon.new",
+                              phy=read.tree("Data/sev_traits_tree101.tre"))
+  
+  # bind to single data frame
+  trait.pics.df <- do.call(rbind, trait_pics) %>%
+    mutate(pic_abs = abs(contrasts), 
+           pic_sd = sqrt(variance)) %>%
+    select(pic = contrasts, pic_abs, var=variance, pic_sd, trans)
+  
+  # create diagnostic plot
 
-pics.ldmc.df %>%
-  ggplot(aes(x=pic_abs, y=pic_sd)) +
-  geom_point() +
-  facet_wrap(~ trans, scales = "free")
-
-dev.off()
-
-
+  trait.pics.df %>%
+    ggplot(aes(x=pic_abs, y=pic_sd)) +
+    geom_point() +
+    facet_wrap(~ trans, scales = "free") 
+  
+  # write to disk
+  ggsave(filename = paste("Figures/pic_trans_diagnostics_", trait, ".pdf", 
+                          sep=""),
+         device="pdf")
+  
+}
 
 ```
 
