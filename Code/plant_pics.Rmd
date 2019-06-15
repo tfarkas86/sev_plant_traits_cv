@@ -95,7 +95,12 @@ pics <- function(x, # a tibble or data frame with trait data
     pic.out <- pic(x = set_names(traits[[1]], rownames(traits)), 
                    phy = pruned, 
                    scaled = scale, 
-                   var.contrasts = TRUE)
+                   var.contrasts = TRUE) %>%
+      as_tibble() %>%
+      mutate(node = rownames(pic.out)) %>%
+      mutate(pic_abs = abs(contrasts), 
+             sd = sqrt(variance)) %>%
+      select(node, pic=contrasts, pic_abs, var=variance, sd)
     
     return(pic.out)
     
@@ -116,13 +121,11 @@ brl_transform <- function(x, # a tibble or data frame with trait data
   
   # No transformatin
   pic.raw <- list(pics(x=x, trait=trait, phy=phy, taxa=taxa, scale=scale) %>% 
-                    as_tibble() %>%
                     mutate(trans = "raw"))
   
   # All equal
   pic.all1 <- list(pics(x=x, trait=trait, phy=compute.brlen(phy=phy, runif, min=0, max=1), 
                         taxa=taxa, scale=scale) %>%
-                     as_tibble() %>%
                      mutate(trans="all1"))
   
   # Pagel transformations
@@ -184,7 +187,7 @@ trait_names <- all_traits %>%
   names()
 
 # loop through names to create diagnostic transformation plots
-for(trait in trait_names[20]) {
+for(trait in trait_names) {
   
   print(trait)
   
@@ -196,9 +199,7 @@ for(trait in trait_names[20]) {
   # bind to single data frame
   trait.pics.df <- do.call(rbind, trait_pics) %>%
     # filter(!grepl("power", .$trans)) %>% # Pagel only
-    mutate(pic_abs = abs(contrasts), 
-           pic_sd = sqrt(variance)) %>%
-    select(pic = contrasts, pic_abs, var=variance, pic_sd, trans)
+   
   
   # get correlations
   trait.cors <- trait.pics.df %>%
