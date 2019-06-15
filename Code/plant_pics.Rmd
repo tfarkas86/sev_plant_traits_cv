@@ -9,52 +9,99 @@ output: html_document
 knitr::opts_chunk$set(echo = FALSE)
 ```
 
-##### Modify Trait Data For Analysis and Merge with CV Data
-```{r}
-raw_traits <- read_csv("~/Dropbox/Projects/Sev/Plants/Data/All Traits/sev_all_traits_Nov2018.csv") %>%
-  filter(! kartez %in% c("DAJA?")) %>%
-  mutate_at(vars(kartez), funs(ifelse(. == "ARPU9", "ARIST", .))) %>%
-  mutate_at(vars(kartez), funs(ifelse(. %in% c("SPCO4", "SPFL2"), "SPORO", .))) %>%
-  mutate_at(vars(kartez), funs(ifelse(. %in% c("ASFE2", "ASNU4"), "ASTRA", .))) %>%
-  mutate_at(vars(a_p), funs(ifelse(. == "a", 0, 1))) %>%
+```{r Load Libraries}
+library(tidyverse)
+library(ape)
+```
+
+
+##### Modify Trait Data For Analysis 
+```{r Data Input and Prep}
+raw_traits <- read_csv("./Data/sev_all_traits_Nov2018.csv") %>%
+  filter(! kartez %in% c("DAJA?")) %>% # just not sure about this ID, plust not much data
+  mutate_at(vars(kartez), funs(ifelse(. == "ARPU9", "ARIST", .))) %>% # lump big Aristida under ARIST
+  mutate_at(vars(kartez), funs(ifelse(. %in% c("SPCO4", "SPFL2"), "SPORO", .))) %>% # lump Sporobolus 
+  mutate_at(vars(kartez), funs(ifelse(. %in% c("ASFE2", "ASNU4"), "ASTRA", .))) %>% # lump Astragalus
+  mutate_at(vars(a_p), funs(ifelse(. == "a", 0, 1))) %>% # numeric annual vs. perennial
   group_by(kartez) 
 
-load(file="~/Dropbox/Projects/Sev/Plants/Data/Biomass/sev_plant_CV.RData")
-
 all_traits <- 
+  # now there are duplicate kartez codes, so summarize
   inner_join(raw_traits %>% summarize_at(vars(family:apgf, -a_p), funs(max)),
              raw_traits %>% summarize_at(vars(a_p, avg.height_A:seed_mass), funs(mean)), 
-             by = "kartez") %>%
-  inner_join(temp_cv, by="kartez") %>%
+             by = "kartez") %>% 
+  # remove outliers
   mutate_at(vars(lma), funs(ifelse(. > 0.1, NA, .))) %>%
   mutate_at(vars(p95.height_A), funs(ifelse(. > 100, NA, .))) %>%
   mutate_at(vars(sdens), funs(ifelse(. > 0.003, NA, .))) %>%
-mutate_at(vars(rdens), funs(ifelse(. > 0.003, NA, .))) %>%
+  mutate_at(vars(rdens), funs(ifelse(. > 0.003, NA, .))) %>%
   mutate_at(vars(fr.diam), funs(ifelse(. > 0.15, NA, .))) 
-
 
 ```
 
-##### Basic traits exploration
+##### Basic EDA
 ```{r}
 
-ggplot(all_traits) + 
-  geom_histogram(aes(x=seed_mass))
 
-ad2 <- ad_ag %>%
-  select(a_p, p95.height_A, ldmc, lma, area, cn, sdmc:rdens) %>%
-  mutate_at(vars(a_p), as.numeric) %>%
-  filter(p95.height_A < 150, lma < .09, rdens < .002, cn < 60)
-
-ggplot(data=ad2, aes(ad2$cn)) + geom_histogram()
-filter(ad2, p95.height_A > 100)
-
-ggpairs(ad2)
 ```
 
 #### PICs
 
 pics() function takes x = a data frame, cols = a character vector of column names, phy = a tree file, center = logical to mean center all PICs, and a print.tree = logical whether to print the phylogeny. pics() returns a data frame with PICs for each variable, and automatically includes only complete cases across cols. 
+
+```{r pics() Function For Transformation}
+
+x <- all_traits %>%
+  select(taxon.new, ldmc)
+trait <- "ldmc"
+taxa="taxon.new"
+phy <- read.tree("Data/sev_traits_tree101.tre")
+
+pics <- function(x, # a tibble or data frame with trait data
+                 trait, # a character string of trait column
+                 phy, # a phylogenetic tree of class "phylo" & order "cladewise"
+                 taxa, # a character string of the taxon column, to match tips in phy
+                 center=TRUE, 
+                 scale=TRUE) { # logical indicator whether to mean center PIC output
+  
+  require(ape)
+  require(dplyr)
+  require(geiger)
+  
+  #### modify data ####
+  
+    dd <- x %>%
+      as_tibble() %>%
+      filter(complete.cases(.)) %>% # filter complete cases
+      as.data.frame() # to data frame in case of tibble
+    # get row names for ape::pic function
+    taxon.names <- dd[, taxa]
+    
+    # get trait values data frame
+    traits <- dd[, trait, drop=FALSE]
+    
+    # assign row names
+    rownames(traits) <- taxon.names
+  
+  #### modify tree ####   
+    
+    # prune tree and resolve mutichotomies
+    pruned <- drop.tip(phy, setdiff(phy$tip.label, taxon.names)) %>%
+      multi2di(phy, random=FALSE) 
+    
+    # label nodes
+    pruned$node.label <- paste("node", 
+                            formatC(c(1:phy$Nnode), 
+                                    digits=0, width=nchar(phy$Nnode), flag="0"))
+    
+  #### apply pic function ####
+    
+    pic.out <- pic(x = traits[[1]], phy = pruned, 
+                   scaled = scale, var.contrasts = TRUE)
+    
+}
+```
+
 
 ```{r pics() Function}
 
