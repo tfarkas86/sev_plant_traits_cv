@@ -102,9 +102,50 @@ pics <- function(x, # a tibble or data frame with trait data
                    scaled = scale, 
                    var.contrasts = TRUE)
     
+    return(pic.out)
+    
 }
 
 pics(x=x, trait="ldmc", phy=read.tree("Data/sev_traits_tree101.tre"), taxa="taxon.new")
+```
+
+```{r Find Transformation}
+
+brl_transform <- function(x, # a tibble or data frame with trait data
+                          trait, # a character string of trait column
+                          phy, # a phylogenetic tree of class "phylo" & order "cladewise"
+                          taxa, # a character string of the taxon column, to match tips in phy
+                          scale=TRUE) {
+  
+  require(geiger)
+  
+  # No transformatin
+  pic.raw <- list(pics(x=x, trait=trait, phy=phy, taxa=taxa, scale=scale))
+  
+  # All equal
+  pic.all1 <- list(pics(x=x, trait=trait, phy=compute.brlen(phy=pruned, runif, min=0, max=1), taxa=taxa, scale=scale))
+  
+  # Pagel transformations
+  lambdas <- seq(0, 1, by=.1)  
+  
+  pic.pagel <- lapply(lambdas, function(l) {
+    
+    phy.rscl <- rescale(x=phy, model="lambda", l)
+    pics(x=x, trait=trait, phy=phy.rscl, taxa=taxa, scale=scale)
+    
+  }) 
+  
+  names(pic.pagel) <- paste("lambda = ", lambdas, sep="")
+  
+  # combine into one list
+  pics.out <- c(pic.raw=pic.raw, pic.all1=pic.all1, pic.pagel)
+  
+  return(pics.out)
+  
+}
+
+pics.ldmc <- brl_transform(x=x, trait="ldmc", phy=read.tree("Data/sev_traits_tree101.tre"), taxa = "taxon.new")
+
 ```
 
 
