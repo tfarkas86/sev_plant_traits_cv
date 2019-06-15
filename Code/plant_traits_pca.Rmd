@@ -1,0 +1,62 @@
+---
+title: "R Notebook"
+output: html_notebook
+editor_options: 
+  chunk_output_type: inline
+---
+
+
+##### PCAs
+```{r PCA on PICs}
+
+ccd <- all_pics.noscale %>%
+  select(node, a_p, p95.height_A, ldmc:seed_mass, -sla) %>%
+  filter(complete.cases(.)) 
+
+pca.out <- ccd %>%
+  select(-node) %>%
+  prcomp(scale=TRUE)
+
+plot(summary(pca.out)$importance[3,])
+biplot(pca.out, choices=c(1, 2))
+
+# combine with cv data
+pca.all <- ccd %>% 
+  select(node) %>%
+  cbind(pca.out$x) %>%
+  as.tibble() %>%
+  inner_join(all_pics.noscale, by="node")
+```
+
+```{r Analysis with PICs}
+
+ggplot(pca.all, aes(x=seed_mass)) +
+  geom_histogram()
+
+pca.all %>% filter( seed_mass > .002)
+n3 <- extract.clade(phy, node="node 70")
+plot.phylo(n3, show.node.label = TRUE)
+
+pca.all %>% filter(!node %in% c("node 55", "node 70")) %>%
+ggplot(aes(y=F.A.cv_BIM, x=PC3, label=node)) +
+  geom_point() + 
+  geom_label(label.size = .01)
+
+an.PC <- lm(F.A.cv_BM ~ PC1 + PC2 + PC3, data=pca.all, subset=!node %in% c("node 55", "node 70"))
+summary(an.PC)
+
+an.a_p <- lm(F.A.cv_BM ~ a_p, data=pca.all)
+summary(an.a_p)
+
+an.ldmc <- lm(F.A.cv_BM ~ ldmc, data=pca.all)
+summary(an.ldmc)
+
+an.sdens <- lm(F.A.cv_BM ~ sdens, data=pca.all)
+summary(an.sdens)
+
+an.comb <- lm(F.A.cv_BM ~ ldmc + cn + fr.diam + sdens + seed_mass + a_p, data=pca.all)
+summary(an.comb)
+```
+
+
+
