@@ -49,7 +49,7 @@ all_traits <-
 
 pics() function takes x = a data frame, cols = a character vector of column names, phy = a tree file, center = logical to mean center all PICs, and a print.tree = logical whether to print the phylogeny. pics() returns a data frame with PICs for each variable, and automatically includes only complete cases across cols. 
 
-```{r pics() Function For Transformation}
+```{r Single Trait Pics Function}
 
 x <- all_traits %>%
   select(taxon.new, ldmc)
@@ -61,7 +61,6 @@ pics <- function(x, # a tibble or data frame with trait data
                  trait, # a character string of trait column
                  phy, # a phylogenetic tree of class "phylo" & order "cladewise"
                  taxa, # a character string of the taxon column, to match tips in phy
-                 center=TRUE, 
                  scale=TRUE) { # logical indicator whether to mean center PIC output
   
   require(ape)
@@ -85,21 +84,27 @@ pics <- function(x, # a tibble or data frame with trait data
   
   #### modify tree ####   
     
-    # prune tree and resolve mutichotomies
+    # prune tree and data and resolve mutichotomies
     pruned <- drop.tip(phy, setdiff(phy$tip.label, taxon.names)) %>%
       multi2di(phy, random=FALSE) 
+    traits <- traits[! rownames(traits) %in% setdiff(phy$tip.label, taxon.names), , drop=FALSE]
+
     
     # label nodes
     pruned$node.label <- paste("node", 
-                            formatC(c(1:phy$Nnode), 
-                                    digits=0, width=nchar(phy$Nnode), flag="0"))
+                            formatC(c(1:pruned$Nnode), 
+                                    digits=0, width=nchar(pruned$Nnode), flag="0"))
     
   #### apply pic function ####
     
-    pic.out <- pic(x = traits[[1]], phy = pruned, 
-                   scaled = scale, var.contrasts = TRUE)
+    pic.out <- pic(x = set_names(traits[[1]], rownames(traits)), 
+                   phy = pruned, 
+                   scaled = scale, 
+                   var.contrasts = TRUE)
     
 }
+
+pics(x=x, trait="ldmc", phy=read.tree("Data/sev_traits_tree101.tre"), taxa="taxon.new")
 ```
 
 
