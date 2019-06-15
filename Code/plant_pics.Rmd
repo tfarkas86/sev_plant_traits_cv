@@ -190,7 +190,7 @@ trait_names <- all_traits %>%
   names()
 
 # loop through names to create diagnostic transformation plots
-for(trait in trait_names) {
+for(trait in trait_names[20]) {
   
   print(trait)
   
@@ -213,12 +213,12 @@ for(trait in trait_names) {
 
   trait.pics.df %>%
     ggplot(aes(x=pic_abs, y=sd)) +
-    geom_point() +
+    geom_label(aes(label=substr(node, nchar(node) - 2, nchar(node))),
+               cex=2.5) +
     facet_wrap(~ trans, scales = "free") + 
-    geom_text(data = trait.cors, aes(x=Inf, y=Inf, 
-                                     label=paste("r = ", trait.cors$cor, sep="")
-                                      ,vjust=1, hjust=1
-                                     ),
+    geom_text(data = trait.cors, 
+              aes(x=Inf, y=Inf, label=paste("r = ", trait.cors$cor, sep=""),
+                  vjust=1, hjust=1),
               cex = 3, col="red")
   
   # write to disk
