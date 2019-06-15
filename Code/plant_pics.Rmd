@@ -58,7 +58,7 @@ taxa="taxon.new"
 phy <- read.tree("Data/sev_traits_tree101.tre")
 
 pics <- function(x, # a tibble or data frame with trait data
-                 trait, # a character string of trait column
+                 trait, # a character string of a single trait column name
                  phy, # a phylogenetic tree of class "phylo" & order "cladewise"
                  taxa, # a character string of the taxon column, to match tips in phy
                  scale=TRUE) { # logical indicator whether to mean center PIC output
@@ -71,6 +71,7 @@ pics <- function(x, # a tibble or data frame with trait data
   
     dd <- x %>%
       as_tibble() %>%
+      select(taxa, trait) %>%
       filter(complete.cases(.)) %>% # filter complete cases
       as.data.frame() # to data frame in case of tibble
     # get row names for ape::pic function
@@ -120,18 +121,25 @@ brl_transform <- function(x, # a tibble or data frame with trait data
   require(geiger)
   
   # No transformatin
-  pic.raw <- list(pics(x=x, trait=trait, phy=phy, taxa=taxa, scale=scale))
+  pic.raw <- list(pics(x=x, trait=trait, phy=phy, taxa=taxa, scale=scale) %>% 
+                    as_tibble() %>%
+                    mutate(trans = "raw"))
   
   # All equal
-  pic.all1 <- list(pics(x=x, trait=trait, phy=compute.brlen(phy=pruned, runif, min=0, max=1), taxa=taxa, scale=scale))
+  pic.all1 <- list(pics(x=x, trait=trait, phy=compute.brlen(phy=pruned, runif, min=0, max=1), 
+                        taxa=taxa, scale=scale) %>%
+                     as_tibble() %>%
+                     mutate(trans="all1"))
   
   # Pagel transformations
-  lambdas <- seq(0, 1, by=.1)  
+  lambdas <- seq(0, .9, by=.1)  
   
   pic.pagel <- lapply(lambdas, function(l) {
     
     phy.rscl <- rescale(x=phy, model="lambda", l)
-    pics(x=x, trait=trait, phy=phy.rscl, taxa=taxa, scale=scale)
+    pics(x=x, trait=trait, phy=phy.rscl, taxa=taxa, scale=scale) %>%
+      as_tibble() %>%
+      mutate(trans = paste("lambda = ", l, sep=""))
     
   }) 
   
@@ -147,6 +155,27 @@ brl_transform <- function(x, # a tibble or data frame with trait data
 pics.ldmc <- brl_transform(x=x, trait="ldmc", phy=read.tree("Data/sev_traits_tree101.tre"), taxa = "taxon.new")
 
 ```
+
+```{r Visualize Transformations}
+
+pics.ldmc.df <- do.call(rbind, pics.ldmc) %>%
+  mutate(pic_abs = abs(contrasts), 
+         pic_sd = sqrt(variance)) %>%
+  select(pic = contrasts, pic_abs, var=variance, pic_sd, trans)
+
+pdf(file = paste("Figures/", "pic_transformations_ldmc.pdf"))
+
+pics.ldmc.df %>%
+  ggplot(aes(x=pic_abs, y=pic_sd)) +
+  geom_point() +
+  facet_wrap(~ trans, scales = "free")
+
+dev.off()
+
+
+
+```
+
 
 
 ```{r pics() Function}
