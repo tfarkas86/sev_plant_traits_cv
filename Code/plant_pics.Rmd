@@ -12,6 +12,7 @@ knitr::opts_chunk$set(echo = FALSE)
 ```{r Load Libraries}
 library(tidyverse)
 library(ape)
+library(geiger)
 ```
 
 
@@ -39,15 +40,7 @@ all_traits <-
 
 ```
 
-##### Basic EDA
-```{r}
-
-
-```
-
 #### PICs
-
-pics() function takes x = a data frame, cols = a character vector of column names, phy = a tree file, center = logical to mean center all PICs, and a print.tree = logical whether to print the phylogeny. pics() returns a data frame with PICs for each variable, and automatically includes only complete cases across cols. 
 
 ```{r Single Trait Pics Function}
 
@@ -59,8 +52,7 @@ pics <- function(x, # a tibble or data frame with trait data
   
   require(ape)
   require(dplyr)
-  require(geiger)
-  
+
   #### modify data ####
   
     dd <- x %>%
@@ -106,7 +98,6 @@ pics <- function(x, # a tibble or data frame with trait data
     return(pic.out)
     
 }
-
 
 ```
 
