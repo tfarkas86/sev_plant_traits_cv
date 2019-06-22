@@ -5,58 +5,95 @@ editor_options:
   chunk_output_type: inline
 ---
 
+```{r Load libraries}
+
+library(tidyverse)
+
+```
+
 
 ##### Biomass and CV
 ```{r Input/Modify/Explore Raw Biomass Data}
 ## Input raw data
-ab.raw <- read_csv("~/Dropbox/Projects/Sev/Plants/Data/Biomass/Sevilleta_allbiomass_28Jan2018.csv")
+  ab.raw <- read_csv("../Data/Sevilleta_allbiomass_28Jan2018.csv", 
+                     col_types=cols(transect = col_character(),
+                                    year = col_integer(), 
+                                    web = col_character(), 
+                                    quad = col_character())) # guessed logical
 
 ## modify data
 ab <- ab.raw %>%
-  filter(substr(site, 1, 4) == "core", treatment == "C") %>%
-  mutate_at(vars(year), funs(paste("y", year, sep=""))) %>%
-  mutate_at(vars(kartez), funs(ifelse(. %in% c("ARDI5", "ARPU9"), "ARIST", 
-                                      ifelse(. %in% c("SPCO4", "SPFL", "SPCR"),
-                                             "SPORO", ifelse(. == "OESU3", "GACO5", 
-                                                             ifelse(. == "OESUN", "GASUN", 
-                                                                    ifelse(. == "DYGR", "CHGR2", 
-                                                                           ifelse(. %in% c("ASFE2", "ASNU4", "ASTRA"), "ASTRA", .)))))))) %>%
-  mutate_at(vars(site, year, season, web:kartez, treatment), funs(as.factor(.))) %>%
-  mutate_at(vars(site), 
-            funs(fct_recode(., "G" = "core_black", "C" = "core_creosote", 
-                            "B" = "core_blue", "P" = "core_PJ" ))) %>%
-  mutate_at(vars(season), 
-            funs(fct_recode(., "F" = "fall", "S" = "spring"))) %>%
-  select(site:kartez, -treatment, -block, -subplot, biomass.BM:biomass.BIM) %>%
-  droplevels()
+  filter(substr(site, 1, 4) == "core", treatment == "C") %>% # core sites only
+  mutate(year_char =  paste("y", year, sep="")) %>% # make year values character
+  # change and aggregate species when kartez change, or are difficult to identify
+  mutate_at(vars(kartez), 
+            funs(ifelse(. %in% c("ARDI5", "ARPU9"), "ARIST", 
+                        ifelse(. %in% c("SPCO4", "SPFL2", "SPCR"), "SPORO", 
+                               ifelse(. == "OESU3", "GACO5", 
+                                      ifelse(. == "OESUN", "GASUN", 
+                                             ifelse(. == "DYGR", "CHGR2", 
+                                                    ifelse(. %in% c("ASFE2", "ASNU4", "ASTRA"), "ASTRA", .)))))))) %>%
+  mutate_at(vars(site), # recode sites to simplify
+            funs(recode(., "core_black" = "G", "core_creosote" = "C", 
+                            "core_blue" = "B", "core_PJ" = "P" ))) %>%
+  mutate_at(vars(season), # recode seasons to simplify
+            funs(recode(., "fall" = "F", "spring" = "S"))) %>%
+  mutate_at(vars(web), funs(ifelse(site == "P", transect, .))) %>%
+  mutate(quad_id = paste(site, web, plot, quad, sep="_")) %>%
+  select(site, year, year_char, season:quad, quad_id, kartez, biomass.BM:biomass.BIM,
+         -treatment, -block, -subplot, -transect) %>%
+  droplevels() # reset factor levels
+
 ```
 
 ```{r Biomass Exploration}
-## raw data xploration
-
-levels(ab$kartez)
 
 ## match with traits species
-sp.raw <- read_csv("~/Dropbox/Projects/Sev/Plants/Data/All Traits/sev_all_traits_Nov2018.csv") %>% 
+sp.raw <- read_csv("../Data/sev_all_traits_Nov2018.csv") %>% 
   mutate_at(vars(kartez), funs(as_factor(.)))
 
 quad.raw <- read_csv("~/Dropbox/Projects/Sev/Plants/Data/Biomass/NPP_quad_20181105.csv") %>% 
   mutate_at(vars(Species), funs(as_factor(.)))
 
-# missing 35 species from biomass file, but not from quad data
-# probably a bug in the allometry code, but not sure
+levels(ab$kartez)
+levels(sp.raw$kartez)
+
 intersect(sp.raw$kartez, levels(ab$kartez))
-setdiff(sp.raw$kartez, levels(ab$kartez))
+setdiff(sp.raw$kartez, levels(ab$kartez)) # only missing species have been aggregated = good
 setdiff(levels(ab$kartez), sp.raw$kartez)
 setdiff(sp.raw$kartez, levels(quad.raw$Species))
 setdiff(levels(quad.raw$Species), sp.raw$kartez)
+
 ```
+
+```{r Identify Skipped Quads}
+
+# fill in all year*quad combinations with no data as 0s
+ab %>% 
+  filter(season == "F") %>%
+  group_by(year, site, web, plot, quad) %>%
+  summarize(n_records = n()) %>%
+  ungroup() %>%
+  complete(year, nesting(site, web, plot, quad), fill=list(n_records = 0)) %>%
+  {. ->> "quad_counts"}
+
+# get first and last year containing data for each quad
+quad_counts %>%
+  filter(n_records > 0) %>%
+  group_by(site, web, plot, quad) %>%
+  summarize(min_year = min(year), 
+            max_year = max(year)) %>%
+            {. ->> "start_end"}
+
+
+```
+
 
 ```{r Make CV data}
 temp_cv <- ab %>%
-  group_by(site, year, season, kartez) %>%
-  summarize(density_BM = sum(biomass.BM) / n(),
-            density_BIM = sum(biomass.BIM) / n()) %>%
+  group_by(year, year_char, season, site, web, plot, quad, kartez) %>%
+  summarize(density_BM = sum(biomass.BM) ,
+            density_BIM = sum(biomass.BIM)) %>%
   complete(kartez, nesting(year, season, site), fill=list(density_BM = 0, 
                                                           density_BIM = 0)) %>%
   ungroup() %>% group_by(site, season, kartez) %>%

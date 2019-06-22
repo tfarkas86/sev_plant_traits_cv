@@ -111,21 +111,23 @@ brl_transform <- function(x, # a tibble or data frame with trait data
   
   require(geiger)
   
-  # No transformatin
+  phy.all1 <- compute.brlen(phy=phy, runif, min=0, max=1) # all equals one is base
+  
+  # raw
   pic.raw <- list(pics(x=x, trait=trait, phy=phy, taxa=taxa, scale=scale) %>% 
                     mutate(trans = "raw"))
   
-  # All equal
-  pic.all1 <- list(pics(x=x, trait=trait, phy=compute.brlen(phy=phy, runif, min=0, max=1), 
-                        taxa=taxa, scale=scale) %>%
-                     mutate(trans="all1"))
+  # All equals 1
+  pic.all1 <- list(pics(x=x, trait=trait, phy=phy.all1, taxa=taxa, scale=scale) %>% 
+                    mutate(trans = "all1"))
   
+
   # Pagel transformations
   lambdas <- seq(0, .9, by=.1)  
   
   pic.pagel <- lapply(lambdas, function(l) {
     
-    phy.pagel <- rescale(x=phy, model="lambda", l)
+    phy.pagel <- rescale(x=phy.all1, model="lambda", l)
     pics(x=x, trait=trait, phy=phy.pagel, taxa=taxa, scale=scale) %>%
       as_tibble() %>%
       mutate(trans = paste("Pagel: lambda = ", l, sep=""))
@@ -139,7 +141,7 @@ brl_transform <- function(x, # a tibble or data frame with trait data
   
   pic.grafen <- lapply(rhos, function(p) {
     
-    phy.grafen <- compute.brlen(phy=phy, power=p)
+    phy.grafen <- compute.brlen(phy=phy.all1, power=p)
     pics(x=x, trait=trait, phy=phy.grafen, taxa=taxa, scale=scale) %>%
       as_tibble() %>%
       mutate(trans = paste("Grafen: power = ", p, sep=""))
@@ -148,8 +150,23 @@ brl_transform <- function(x, # a tibble or data frame with trait data
   
   names(pic.grafen) <- paste("Grafen: power = ", lambdas, sep="")
   
+  # Ornstein-Uhlenbeck transformations
+  alphas <- c(.01, .05, .1, .25, .5, .75, 1, 2)
+  
+  pic.OU <- lapply(alphas, function(alp) {
+    
+    phy.OU <- rescale(x=phy.all1, model="OU", alp)
+    pics(x=x, trait=trait, phy=phy.OU, taxa=taxa, scale=scale) %>%
+      as_tibble() %>%
+      mutate(trans = paste("OU: alpha = ", alp, sep=""))
+    
+  }) 
+  
+    names(pic.OU) <- paste("OU: alpha = ", alphas, sep="")
+    
   # combine into one list
-  pics.out <- c(pic.raw=pic.raw, pic.all1=pic.all1, pic.pagel, pic.grafen)
+  pics.out <- c(pic.raw=pic.raw, pic.all1=pic.all1, 
+                pic.pagel, pic.grafen, pic.OU)
   
   return(pics.out)
   
@@ -181,7 +198,7 @@ trait_names <- all_traits %>%
   names()
 
 # loop through names to create diagnostic transformation plots
-for(trait in trait_names[20]) {
+for(trait in trait_names) {
   
   print(trait)
   
