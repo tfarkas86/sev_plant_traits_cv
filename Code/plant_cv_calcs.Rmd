@@ -85,6 +85,10 @@ quad_counts %>%
             max_year = max(year)) %>%
             {. ->> "start_end"}
 
+start_end %>%
+  filter(min_year > 2003 |
+         max_year < 2017)
+
 # filter out quads with inconsistent sampling
 ab2 <- ab %>%
   semi_join(start_end %>%
