@@ -90,47 +90,72 @@ start_end %>%
   filter(min_year > 2003 |
          max_year < 2017)
 
-# filter out quads with inconsistent sampling
+# filter out quads with inconsistent sampling, fall only, and restrict
+# to 2003 through 2017
 ab2 <- ab %>%
   semi_join(start_end %>%
               filter(min_year < 2004, 
-                     max_year == 2017), 
-            by=c("site", "web", "plot", "quad")) 
+                     max_year >= 2017), 
+            by=c("site", "web", "plot", "quad")) %>%
+  filter(between(year, 2003, 2017))
+
+# get number of quads per site
+ab2 %>%
+  group_by(site, year) %>%
+  summarize(n_distinct(quad_id))
+
+# explore illogical zero/non-zero pairs
+ab2 %>% 
+  filter(biomass.BM == 0 & biomass.BIM != 0) %>%
+  mutate(set = "illogical") %>%
+  bind_rows(ab2 %>% filter(biomass.BM > 0 & biomass.BIM > 0) %>%
+              mutate(set = "logical")) %>%
+ggplot(aes(x=biomass.BIM, fill=set)) + 
+  geom_histogram(position="dodge") + 
+  coord_cartesian(ylim=c(0, 500))
 
 ```
 
 
 ```{r Make CV data}
-temp_cv <- ab %>%
+temp_cv <- ab2 %>%
   group_by(year, year_char, season, site, web, plot, quad, kartez) %>%
+  # sum biomass for each kartez for each quad each year
   summarize(density_BM = sum(biomass.BM) ,
             density_BIM = sum(biomass.BIM)) %>%
+  # instantiate zeros for species not occurring 
   complete(kartez, nesting(year, season, site), fill=list(density_BM = 0, 
                                                           density_BIM = 0)) %>%
   ungroup() %>% group_by(site, season, kartez) %>%
   summarize(cv_BM = sd(density_BM)/mean(density_BM),
             cv_BIM = sd(density_BIM)/mean(density_BIM)) %>%
   ungroup() %>%
-  replace(is.na(.), NA) %>%
   gather(key = "cv_type", value = "density", starts_with("cv")) %>%
   unite(col = season_site_cv, season, site, cv_type, sep=".") %>%
   spread(key=season_site_cv, value=density) %>%
   rowwise() %>%
-  mutate(# Fall Flats only average, Fall All sites average
-    F.F.cv_BIM = mean(c(F.B.cv_BIM, F.C.cv_BIM, F.G.cv_BIM), na.rm=TRUE),
-    F.F.cv_BM = mean(c(F.B.cv_BM, F.C.cv_BM, F.G.cv_BM), na.rm=TRUE),
-    F.A.cv_BIM = mean(c(F.B.cv_BIM, F.C.cv_BIM, F.G.cv_BIM, F.P.cv_BIM),
-                      na.rm=TRUE),
-    F.A.cv_BM = mean(c(F.B.cv_BM, F.C.cv_BM, F.G.cv_BM, F.P.cv_BM),
-                     na.rm=TRUE),
-    # Spring
-    S.F.cv_BIM = mean(c(S.B.cv_BIM, S.C.cv_BIM, S.G.cv_BIM), na.rm=TRUE),
-    S.F.cv_BM = mean(c(S.B.cv_BM, S.C.cv_BM, S.G.cv_BM), na.rm=TRUE),
-    S.A.cv_BIM = mean(c(S.B.cv_BIM, S.C.cv_BIM, S.G.cv_BIM, S.P.cv_BIM),
-                      na.rm=TRUE),
-    S.A.cv_BM = mean(c(S.B.cv_BM, S.C.cv_BM, S.G.cv_BM, S.P.cv_BM),
-                     na.rm=TRUE))
+  # Fall Flats only average, Fall All sites average
+  mutate(F.F.cv_BIM = mean(c(F.B.cv_BIM, F.C.cv_BIM, F.G.cv_BIM), na.rm=TRUE),
+         F.F.cv_BM = mean(c(F.B.cv_BM, F.C.cv_BM, F.G.cv_BM), na.rm=TRUE),
+         F.A.cv_BIM = mean(c(F.B.cv_BIM, F.C.cv_BIM, F.G.cv_BIM, F.P.cv_BIM),
+                           na.rm=TRUE),
+         F.A.cv_BM = mean(c(F.B.cv_BM, F.C.cv_BM, F.G.cv_BM, F.P.cv_BM),
+                          na.rm=TRUE),
+  # Spring
+         S.F.cv_BIM = mean(c(S.B.cv_BIM, S.C.cv_BIM, S.G.cv_BIM), na.rm=TRUE),
+         S.F.cv_BM = mean(c(S.B.cv_BM, S.C.cv_BM, S.G.cv_BM), na.rm=TRUE),
+         S.A.cv_BIM = mean(c(S.B.cv_BIM, S.C.cv_BIM, S.G.cv_BIM, S.P.cv_BIM),
+                           na.rm=TRUE),
+         S.A.cv_BM = mean(c(S.B.cv_BM, S.C.cv_BM, S.G.cv_BM, S.P.cv_BM),
+                          na.rm=TRUE)) %>%
+  ungroup() %>%
+  mutate_at(vars(F.F.cv_BIM:S.A.cv_BM), funs(ifelse(is.nan(.), NA, .)))
 
+# get num records per quad per year
+temp_cv %>% 
+  group_by(site, year) %>%
+  n_distinct()
+  
 save(temp_cv, file="~/Dropbox/Projects/Sev/Plants/Data/Biomass/sev_plant_CV.RData")
 ```
 
