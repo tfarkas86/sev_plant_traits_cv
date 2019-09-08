@@ -2,7 +2,7 @@
 title: "R Notebook"
 output: html_notebook
 editor_options: 
-  chunk_output_type: inline
+  chunk_output_type: console
 ---
 
 ```{r Load libraries}
@@ -40,8 +40,9 @@ ab <- ab.raw %>%
             funs(recode(., "fall" = "F", "spring" = "S"))) %>%
   mutate_at(vars(web), funs(ifelse(site == "P", transect, .))) %>%
   mutate(quad_id = paste(site, web, plot, quad, sep="_")) %>%
-  select(site, year, year_char, season:quad, quad_id, kartez, biomass.BM:biomass.BIM,
-         -treatment, -block, -subplot, -transect) %>%
+  select(site, year, year_char, season:quad, quad_id, kartez,
+         biomass.BM:biomass.BIM,
+         -treatment, -block, -subplot, -transect, -date) %>%
   droplevels() # reset factor levels
 
 ```
@@ -69,16 +70,13 @@ setdiff(levels(quad.raw$Species), sp.raw$kartez)
 ```{r Identify Skipped Quads}
 
 # fill in all year*quad combinations with no data as 0s
+# get first and last year containing data for each quad
 ab %>% 
   filter(season == "F") %>%
   group_by(year, site, web, plot, quad) %>%
   summarize(n_records = n()) %>%
   ungroup() %>%
   complete(year, nesting(site, web, plot, quad), fill=list(n_records = 0)) %>%
-  {. ->> "quad_counts"}
-
-# get first and last year containing data for each quad
-quad_counts %>%
   filter(n_records > 0) %>%
   group_by(site, web, plot, quad) %>%
   summarize(min_year = min(year), 
@@ -97,7 +95,9 @@ ab2 <- ab %>%
               filter(min_year < 2004, 
                      max_year >= 2017), 
             by=c("site", "web", "plot", "quad")) %>%
-  filter(between(year, 2003, 2017))
+  filter(between(year, 2003, 2017)) %>%
+  complete(kartez, nesting(year, year_char, season), 
+                           nesting(site, web, plot, quad, quad_id))
 
 # get number of quads per site
 ab2 %>%
@@ -106,30 +106,220 @@ ab2 %>%
 
 # explore illogical zero/non-zero pairs
 ab2 %>% 
-  filter(biomass.BM == 0 & biomass.BIM != 0) %>%
+  filter((biomass.BM == 0 & biomass.BIM != 0) | 
+           (biomass.BM != 0 & biomass.BIM == 0)) %>%
   mutate(set = "illogical") %>%
   bind_rows(ab2 %>% filter(biomass.BM > 0 & biomass.BIM > 0) %>%
               mutate(set = "logical")) %>%
+  write_csv("illogical_biomass.csv")
+
 ggplot(aes(x=biomass.BIM, fill=set)) + 
   geom_histogram(position="dodge") + 
   coord_cartesian(ylim=c(0, 500))
 
 ```
 
-
 ```{r Make CV data}
-temp_cv <- ab2 %>%
-  group_by(year, year_char, season, site, web, plot, quad, kartez) %>%
-  # sum biomass for each kartez for each quad each year
+# vc for each unique quad-season-kartez
+temp_cv_quad <- ab %>%
+  
+  # filter out quads with inconsistent sampling
+  semi_join(start_end %>%
+              filter(min_year < 2004, 
+                     max_year >= 2017), 
+            by=c("site", "web", "plot", "quad")) %>%
+  
+  # restrict sampling years
+  filter(between(year, 2003, 2017)) %>% 
+
+  # fill implicit missing values with explicit 0s, 
+  # but only for quads with at least one instance of a species
+  # to avoid filling 0s for all years -> CV = NaN
+  complete(nesting(year, year_char), 
+           nesting(kartez, season, site, web, plot, quad, quad_id), 
+           fill=list(biomass.BM=0, biomass.BIM= 0)) %>%
+  
+  # sum biomass for each kartez for each quad sampling
+  group_by(year, year_char, season, site, web, plot, quad, quad_id, kartez) %>%
   summarize(density_BM = sum(biomass.BM) ,
             density_BIM = sum(biomass.BIM)) %>%
-  # instantiate zeros for species not occurring 
-  complete(kartez, nesting(year, season, site), fill=list(density_BM = 0, 
-                                                          density_BIM = 0)) %>%
-  ungroup() %>% group_by(site, season, kartez) %>%
-  summarize(cv_BM = sd(density_BM)/mean(density_BM),
-            cv_BIM = sd(density_BIM)/mean(density_BIM)) %>%
+  
+  # regroup by season, site, web, plot, quad, quad_id, kartez
+  ungroup() %>% group_by(season, site, web, plot, quad, quad_id, kartez) %>%
+  
+  # gather two density measures
+  rename(BM=density_BM, BIM=density_BIM) %>%
+  gather(key = "allometry", value="density", BM, BIM) %>%
+  
+  # calculate bounciness for all season, kartez, quad combination
+  ungroup() %>% 
+  group_by(season, site, web, plot, quad, quad_id, kartez, allometry) %>%
+  summarize(cv = sd(density)/mean(density), # coefficient of variation
+            # autocorrelation of 1-year lag
+            acor = acf(density, plot=FALSE, lag.max=1,
+                       type="correlation")$acf[2], 
+            acov = acf(density, plot=FALSE, lag.max=1,
+                       type="covariance")$acf[2],
+            acv = acv(density),
+            n_zero = sum(density == 0), # number of zero densities 
+            dens_mean = mean(density)) %>% # mean
+  filter(n_zero < 15) %>%
   ungroup() %>%
+  
+  # gather metrics of bounciness
+  gather(key="bounce_type", value="bounce", cv, acor, acov, acv)
+```
+
+```{r Aggregate bounciness for unique season-site-kartez}
+temp_cv <- temp_cv_quad %>%
+  
+  # filter for focal bounce metrics
+  filter(bounce_type %in% c("cv", "acor")) %>%
+  
+  # group to aggregate quads
+  group_by(season, site, kartez, allometry, bounce_type) %>%
+  
+  # get mean of bounce and other aggregate stats
+  summarize(bounce = mean(bounce),
+            n_zero_mean = mean(n_zero), 
+            dens_mean = mean(dens_mean), 
+            n_quads = n()) %>%
+  
+  arrange(desc(bounce_type), allometry) %>%
+  ungroup() %>%
+  
+  # concatenate with all-sites and flats-only aggregations
+  bind_rows(., 
+            
+            # all sites
+            temp_cv_quad %>%
+              
+              # filter for focal bounce metrics
+              filter(bounce_type %in% c("cv", "acor")) %>%
+              
+              # group to aggregate quads
+              group_by(season, kartez, allometry, bounce_type) %>%
+              
+              # get mean of bounce and other aggregate stats
+              summarize(bounce = mean(bounce),
+                        n_zero_mean = mean(n_zero), 
+                        dens_mean = mean(dens_mean), 
+                        n_quads = n()) %>%
+              
+              # add site = "A"
+              mutate(site = "A") %>%
+              
+              arrange(desc(bounce_type), allometry) %>%
+              ungroup(),
+            
+            # flats only
+            temp_cv_quad %>%
+              
+              # filter for focal bounce metrics and remove PJ
+              filter(bounce_type %in% c("cv", "acor"),
+                     site != "P") %>%
+              
+              # group to aggregate quads
+              group_by(season, kartez, allometry, bounce_type) %>%
+              
+              # get mean of bounce and other aggregate stats
+              summarize(bounce = mean(bounce),
+                        n_zero_mean = mean(n_zero), 
+                        dens_mean = mean(dens_mean), 
+                        n_quads = n()) %>%
+              
+              # add site == "F"
+              mutate(site = "F") %>%
+              
+              arrange(desc(bounce_type), allometry) %>%
+              ungroup())
+
+
+# write out widened file for PICs
+temp_wide <- temp_cv %>% 
+  
+  # cv, Fall, and BM onlyonly
+  filter(bounce_type == "cv",
+         season == "F", 
+         allometry == "BM") %>%
+  
+  # make temp column for spread
+  mutate(key = paste(season, site, allometry, bounce_type, sep="_")) %>%
+  
+  # keep only spreading variables
+  select(kartez, key, bounce) %>%
+  
+  # widen for 1 metric per column
+  spread(key="key", value="bounce") %>%
+  
+  arrange(kartez)
+
+```
+
+```{r}
+temp_cv %>%
+  # filter(bounce_type == "cv") %>%
+  
+  ggplot() +
+  geom_point(aes(x=n_zero_mean, y=bounce)) +
+  facet_wrap(~bounce_type, scales="free")
+```
+
+
+
+```{r Explore CV and Autocovariance}
+
+temp_cv_quad %>% 
+  filter(bounce_type == "acv", 
+         bounce > 500)
+
+temp_cv_quad %>%
+  
+  ggplot() + 
+  geom_point(aes(x = n_zero, y=bounce)) + 
+  facet_wrap(facets = ~ bounce_type + allometry, scales="free")
+  ggsave(filename="bounce_vs_zeros.png")
+
+temp_cv_quad %>%
+  
+  ggplot() + 
+  geom_point(aes(x = dens_mean, y=bounce)) + 
+  facet_wrap(facets = ~ bounce_type + allometry, scales="free")
+  ggsave(filename="bounce_vs_mean.png")
+  
+temp_cv_quad %>%
+  bind_rows(temp_cv_quad %>%
+              filter(n_zero < 14,
+                    bounce_type == "cv") %>%
+              mutate(bounce_type = "cv_2+_nz")) %>%
+  ggplot() + 
+  geom_histogram(aes(x=bounce)) + 
+  facet_wrap(~ bounce_type + allometry, nrow=3, scales="free")
+  ggsave(filename="bounce_histograms.png")
+
+acv <- function(x) {
+  acov <- acf(x, plot=FALSE, type="covariance", lag.max=1)
+  acov$acf[2]/mean(x)
+}
+
+x0.1 <- rep(c(-1, 1), 20)
+x0.2 <- rep(c(-2, 2), 20)
+x1.1 <- rep(c(0, 2), 20)
+x1.2 <- rep(c(-1, 3), 20)
+x10.1 <-rep(c(9, 11), 20)
+
+acf( x0.1, plot=FALSE, type="covariance", lag.max=1)$acf[2] # -0.975
+acf( x0.2, plot=FALSE, type="covariance", lag.max=1)$acf[2] # -3.900
+acf( x1.1, plot=FALSE, type="covariance", lag.max=1)$acf[2] # -0.975
+acf( x1.2, plot=FALSE, type="covariance", lag.max=1)$acf[2] # -3.900
+acf(x10.1, plot=FALSE, type="covariance", lag.max=1)$acf[2] # -0.975
+
+
+```
+
+```{r}
+
+  
   gather(key = "cv_type", value = "density", starts_with("cv")) %>%
   unite(col = season_site_cv, season, site, cv_type, sep=".") %>%
   spread(key=season_site_cv, value=density) %>%

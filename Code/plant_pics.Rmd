@@ -19,11 +19,23 @@ library(geiger)
 ##### Modify Trait Data For Analysis 
 ```{r Data Input and Prep}
 raw_traits <- read_csv("./Data/sev_all_traits_Nov2018.csv") %>%
-  filter(! kartez %in% c("DAJA?")) %>% # just not sure about this ID, plust not much data
-  mutate_at(vars(kartez), funs(ifelse(. == "ARPU9", "ARIST", .))) %>% # lump big Aristida under ARIST
-  mutate_at(vars(kartez), funs(ifelse(. %in% c("SPCO4", "SPFL2"), "SPORO", .))) %>% # lump Sporobolus 
-  mutate_at(vars(kartez), funs(ifelse(. %in% c("ASFE2", "ASNU4"), "ASTRA", .))) %>% # lump Astragalus
-  mutate_at(vars(a_p), funs(ifelse(. == "a", 0, 1))) %>% # numeric annual vs. perennial
+  
+  # just not sure about this ID, plust not much data
+  filter(! kartez %in% c("DAJA?")) %>% 
+  
+  # lump big Aristida under ARIST
+  mutate_at(vars(kartez), funs(ifelse(. == "ARPU9", "ARIST", .))) %>% 
+  
+  # lump Sporobolus 
+  mutate_at(vars(kartez), funs(ifelse(. %in% c("SPCO4", "SPFL2"), "SPORO", .))) %>% 
+  
+  # lump Astragalus
+  mutate_at(vars(kartez), funs(ifelse(. %in% c("ASFE2", "ASNU4"), "ASTRA", .))) %>% 
+  
+  # numeric annual vs. perennial
+  mutate_at(vars(a_p), funs(ifelse(. == "a", 0, 1))) %>% 
+  
+  # group by plant species
   group_by(kartez) 
 
 all_traits <- 
@@ -36,8 +48,10 @@ all_traits <-
   mutate_at(vars(p95.height_A), funs(ifelse(. > 100, NA, .))) %>%
   mutate_at(vars(sdens), funs(ifelse(. > 0.003, NA, .))) %>%
   mutate_at(vars(rdens), funs(ifelse(. > 0.003, NA, .))) %>%
-  mutate_at(vars(fr.diam), funs(ifelse(. > 0.15, NA, .))) 
+  mutate_at(vars(fr.diam), funs(ifelse(. > 0.15, NA, .))) %>%
 
+# join in cv values
+  inner_join(temp_wide)
 ```
 
 #### PICs
@@ -74,7 +88,8 @@ pics <- function(x, # a tibble or data frame with trait data
     # prune tree and data and resolve mutichotomies
     pruned <- drop.tip(phy, setdiff(phy$tip.label, taxon.names)) %>%
       multi2di(phy, random=FALSE) 
-    traits <- traits[! rownames(traits) %in% setdiff(phy$tip.label, taxon.names), , drop=FALSE]
+    traits <- traits[! rownames(traits) %in% setdiff(phy$tip.label, taxon.names),
+                     , drop=FALSE]
 
     
     # label nodes
@@ -110,6 +125,7 @@ brl_transform <- function(x, # a tibble or data frame with trait data
                           scale=TRUE) {
   
   require(geiger)
+  require(tidyverse)
   
   phy.all1 <- compute.brlen(phy=phy, runif, min=0, max=1) # all equals one is base
   
@@ -165,7 +181,7 @@ brl_transform <- function(x, # a tibble or data frame with trait data
     names(pic.OU) <- paste("OU: alpha = ", alphas, sep="")
     
   # combine into one list
-  pics.out <- c(pic.raw=pic.raw, pic.all1=pic.all1, 
+  pics.out <- c(raw=pic.raw, all1=pic.all1, 
                 pic.pagel, pic.grafen, pic.OU)
   
   return(pics.out)
@@ -177,12 +193,12 @@ brl_transform <- function(x, # a tibble or data frame with trait data
 
 ```{r Function Testing}
 x <- all_traits 
-trait <- "ldmc"
+trait <- "avg.height_B"
 taxa="taxon.new"
 phy <- read.tree("Data/sev_traits_tree101.tre")
 
 # test single pic function
-pics(x=all_traits, trait=trait, phy=read.tree("Data/sev_traits_tree101.tre"), taxa="taxon.new")
+test_pic <- pics(x=all_traits, trait=trait, phy=read.tree("Data/sev_traits_tree101.tre"), taxa="taxon.new")
 
 # test branch length transformation function
 pics.ldmc <- brl_transform(x=all_traits, trait=trait, phy=read.tree("Data/sev_traits_tree101.tre"), taxa = "taxon.new")
@@ -194,7 +210,7 @@ pics.ldmc <- brl_transform(x=all_traits, trait=trait, phy=read.tree("Data/sev_tr
 
 # get all trait names
 trait_names <- all_traits %>%
-  select(a_p:seed_mass) %>%
+  select(a_p:F_P_BM_cv) %>%
   names()
 
 # loop through names to create diagnostic transformation plots
@@ -236,5 +252,40 @@ for(trait in trait_names) {
 }
 
 ```
+
+```{r Chose Transformations}
+
+# manually chosen transformations
+trans <- c(2, 2, 2, 2, 2, 2, 28, 2, 2, 3, 2, 2, 2, 25, 2, 2, 21, 
+           3, 24, 3, 3, 2, 2, 3, 3, 2, 26, 3, 2, 2, 2, 2, 2, 4, 
+           3, 2, 2, 2, 28, 28, 2, 3, 2 )
+
+# ugg, some faff to associate correct transformation with choice from 
+# output figures
+names <- names(all_traits)[15:57]
+names(trans) <- names[order(names)]
+
+trans_options <- names(all_trans)[order(names(all_trans))]
+
+# perform all transformations for traits of interest, then select
+# manually chosen option and combine into one long list
+all_pics <- setNames(lapply(names(trans), function(t) {
+  
+ all_trans <- brl_transform(x=all_traits, trait=t,
+               read.tree("Data/sev_traits_tree101.tre"), 
+               taxa = "taxon.new")
+ all_trans[[trans_options[trans[t]]]]
+ 
+ }
+ 
+ ), names(trans))
+
+# check results 
+sapply(all_pics, dim)
+all_pics$seed_mass$node
+
+
+```
+
 
 
