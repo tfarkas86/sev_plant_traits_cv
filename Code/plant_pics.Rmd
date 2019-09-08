@@ -294,9 +294,13 @@ all_pics_tib <- lapply(names(all_pics_list), function(t) {
 }) %>%
   reduce(full_join, by="node")
 
-write_csv(all_pics_tib, "../Data/all_pics_joined.csv")
+write_csv(all_pics_tib, "./Data/all_pics_joined.csv")
+
+
 
 ```
+
+
 
 
 

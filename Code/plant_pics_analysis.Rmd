@@ -1,0 +1,73 @@
+---
+title: "PICs Analysis"
+author: "Tim Farkas"
+date: "9/8/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r Load Libraries}
+library(tidyverse)
+library(GGally)
+```
+
+```{r Load Data}
+
+# all pics data
+pd <- read_csv(file = "./Data/all_pics_joined.csv")
+
+pd_long <- pd %>%
+  gather(key = "trait", value = "pic", a_p, area )
+
+```
+
+```{r Explore Data}
+pd %>%
+  select(F_A_BM_cv, 
+         a_p, p95.height_A, cn, fr.dmc, ldmc, lma, rdmc, sdmc, seed_mass) %>%
+ggpairs()
+
+complete_pd <- pd %>%
+  select(F_A_BM_cv, 
+         a_p, area, p95.height_A, cn, fr.dens:lma, 
+         rdens:seed_mass) %>%
+  filter(complete.cases(.))
+
+
+  
+pd_pca <- complete_pd %>%
+  select(-F_A_BM_cv) %>%
+  as.matrix() %>%
+  prcomp(scale=TRUE)
+
+plot(summary(pd_pca)$importance[3,],
+     ylab="cumulative variance explained",
+     xlab="PC Index")
+
+# analysis 
+
+pd_pca_2 <- complete_pd %>% 
+  select(cv=F_A_BM_cv) %>%
+  bind_cols(pd_pca$x %>%
+  as_tibble()) 
+
+pd_pca_2 %>% 
+  select(cv:PC4) %>%
+  # filter(between(cv, -1.5, 2)) %>%
+  ggpairs()
+
+pd_pca_2 %>%
+  filter(between(cv, -1.5, 2)) %>%
+  lm(cv ~ PC1 + PC2, data=.) %>%
+  summary()
+
+pd_pca$rotation
+
+
+```
+
+
+
