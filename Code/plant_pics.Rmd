@@ -56,7 +56,7 @@ all_traits <-
 
 #### PICs
 
-```{r Single Trait Pics Function}
+```{r Single Trait Pics Function With Node Matching}
 
 pics <- function(x, # a tibble or data frame with trait data
                  trait, # a character string of a single trait column name
@@ -85,6 +85,10 @@ pics <- function(x, # a tibble or data frame with trait data
   
   #### modify tree ####   
     
+    # label nodes
+    phy$node.label <- paste("node", 
+                            formatC(c(1:phy$Nnode), 
+                                    digits=0, width=nchar(phy$Nnode), flag="0"))
     # prune tree and data and resolve mutichotomies
     pruned <- drop.tip(phy, setdiff(phy$tip.label, taxon.names)) %>%
       multi2di(phy, random=FALSE) 
@@ -92,10 +96,7 @@ pics <- function(x, # a tibble or data frame with trait data
                      , drop=FALSE]
 
     
-    # label nodes
-    pruned$node.label <- paste("node", 
-                            formatC(c(1:pruned$Nnode), 
-                                    digits=0, width=nchar(pruned$Nnode), flag="0"))
+
     
   #### apply pic function ####
     
