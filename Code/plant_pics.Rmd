@@ -85,13 +85,17 @@ pics <- function(x, # a tibble or data frame with trait data
   
   #### modify tree ####   
     
+    # resolve multichotomies
+    new_phy <-  multi2di(phy, random=FALSE)
+    
     # label nodes
-    phy$node.label <- paste("node", 
-                            formatC(c(1:phy$Nnode), 
-                                    digits=0, width=nchar(phy$Nnode), flag="0"))
-    # prune tree and data and resolve mutichotomies
-    pruned <- drop.tip(phy, setdiff(phy$tip.label, taxon.names)) %>%
-      multi2di(phy, random=FALSE) 
+    new_phy$node.label <- paste("node", 
+                            formatC(c(1:new_phy$Nnode), 
+                                    digits=0, width=nchar(new_phy$Nnode), flag="0"))
+    
+    # prune tree and data
+    pruned <- drop.tip(new_phy, setdiff(phy$tip.label, taxon.names))
+     
     traits <- traits[! rownames(traits) %in% setdiff(phy$tip.label, taxon.names),
                      , drop=FALSE]
 
@@ -194,7 +198,7 @@ brl_transform <- function(x, # a tibble or data frame with trait data
 
 ```{r Function Testing}
 x <- all_traits 
-trait <- "avg.height_B"
+trait <- "sdens"
 taxa="taxon.new"
 phy <- read.tree("Data/sev_traits_tree101.tre")
 
@@ -205,7 +209,6 @@ test_pic <- pics(x=all_traits, trait=trait, phy=read.tree("Data/sev_traits_tree1
 pics.ldmc <- brl_transform(x=all_traits, trait=trait, phy=read.tree("Data/sev_traits_tree101.tre"), taxa = "taxon.new")
 
 ```
-
 
 ```{r Visualize Transformations}
 
@@ -270,7 +273,7 @@ trans_options <- names(all_trans)[order(names(all_trans))]
 
 # perform all transformations for traits of interest, then select
 # manually chosen option and combine into one long list
-all_pics <- setNames(lapply(names(trans), function(t) {
+all_pics_list <- setNames(lapply(names(trans), function(t) {
   
  all_trans <- brl_transform(x=all_traits, trait=t,
                read.tree("Data/sev_traits_tree101.tre"), 
@@ -281,9 +284,24 @@ all_pics <- setNames(lapply(names(trans), function(t) {
  
  ), names(trans))
 
-# check results 
-sapply(all_pics, dim)
-all_pics$seed_mass$node
+# join all traits together
+
+all_pics_tib <- lapply(names(all_pics_list), function(t) {
+  
+  all_pics_list[[t]] %>%
+    select(node, 
+           !!t:= pic)
+}) %>%
+  reduce(full_join, by="node")
+
+# discover empty node name
+
+lapply(all_pics_list, function(x) {
+  
+  x %>%
+    filter(node=="")
+  
+})
 
 
 ```
