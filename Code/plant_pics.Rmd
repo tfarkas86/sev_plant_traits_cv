@@ -294,17 +294,11 @@ all_pics_tib <- lapply(names(all_pics_list), function(t) {
 }) %>%
   reduce(full_join, by="node")
 
-# discover empty node name
-
-lapply(all_pics_list, function(x) {
-  
-  x %>%
-    filter(node=="")
-  
-})
-
+write_csv(all_pics_tib, "../Data/all_pics_joined.csv")
 
 ```
+
+
 
 
 
