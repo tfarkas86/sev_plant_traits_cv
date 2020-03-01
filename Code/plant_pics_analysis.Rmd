@@ -12,22 +12,74 @@ knitr::opts_chunk$set(echo = TRUE)
 ```{r Load Libraries}
 library(tidyverse)
 library(GGally)
+library(pls)
 ```
 
 ```{r Load Data}
 
 # all pics data
-pd <- read_csv(file = "./Data/all_pics_joined.csv")
+pd <- read_csv(file = "./Data/all_pics_joined.csv") %>%
+  mutate_at(vars(node), function(x) as.character(as.numeric(word(x, 2, 2))))
 
 pd_long <- pd %>%
-  gather(key = "trait", value = "pic", a_p, area )
+  gather(key = "trait", value = "pic", a_p:d15N, fr.dens:sla)
+
+```
+
+
+
+```{r Quick Regression Stats}
+
+pees <- c(lapply(setNames(f.list, f.list), function(x) {
+  
+ summary(lm(F_F_BM_cv ~ pic, data=pd_long %>% filter(trait==x)))$coefficients[2, 4]
+  
+}), recursive=TRUE)
+
+sigs <- ifelse(pees > 0.10, "", 
+               ifelse(pees > 0.05, "#",
+                      ifelse(pees > 0.01, "*", 
+                             ifelse(pees > 0.001, "**", "***"))))
+
+reg_out <- tibble(trait=names(pees), p=pees, sig=sigs)
+```
+
+```{r LOESS plots against CV}
+# all sites pairwise regression plots
+a.list <- names(pd)[c(2:3, 10, 19:25, 31, 39:43)]
+
+pd_long %>%  
+  filter(trait %in% a.list) %>%
+  ggplot(mapping=aes(y=F_A_BM_cv, x=pic)) +
+  geom_point() + 
+  geom_smooth(method="lm") +
+  facet_wrap(~ trait, scales="free")
+  
+
+# flats only pairwise regression plots
+f.list <- names(pd)[c(2:3, 10, 19:24, 28, 34, 39:43)]
+
+pd_long %>%  
+  filter(trait %in% f.list) %>%
+  ggplot(mapping=aes(y=F_F_BM_cv, x=pic)) +
+  geom_point() + 
+    facet_wrap(~ trait, scales="free") +
+  geom_text(data = reg_out, 
+              aes(x=Inf, y=Inf, label=reg_out$sig,
+                  vjust=1, hjust=1),
+              cex = 5, col="red") +
+  geom_label(aes(label=node), cex=2) +
+  geom_smooth(method="loess") 
+
+ggsave(filename = "Figures/loess_reg_flats.pdf", 
+         device="pdf", height = 14, width=14)
 
 ```
 
 ```{r Explore Data}
 pd %>%
   select(F_A_BM_cv, 
-         a_p, p95.height_A, cn, fr.dmc, ldmc, lma, rdmc, sdmc, seed_mass) %>%
+         a_p, p95.height_A:d15N, cn, fr.dmc, ldmc, lma, rdmc, sdmc, seed_mass) %>%
 ggpairs()
 
 complete_pd <- pd %>%
@@ -36,8 +88,25 @@ complete_pd <- pd %>%
          rdens:seed_mass) %>%
   filter(complete.cases(.))
 
+```
 
+```{r Partial Least Squares}
+pd_cull <- pd %>%
+  select(F_A_BM_cv, a_p, area, cn, fr.dens:lma,  p95.height_A, rdens:seed_mass) %>%
+  #transmute_all(.funs=function(x) scale(x)) %>%
+  filter(complete.cases(.))
+
+pls_fit <- plsr(F_A_BM_cv ~ ., data=pd_cull)
+
+summary(lm(pd_cull$F_A_BM_cv ~ pls_fit$scores[,4]))
+
+pd_cull <- pd_cull %>%
+  bind_cols(pls_fit$scores)
+ggplot() +
   
+```
+
+```{r}
 pd_pca <- complete_pd %>%
   select(-F_A_BM_cv) %>%
   as.matrix() %>%

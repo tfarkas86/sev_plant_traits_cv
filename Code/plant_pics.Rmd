@@ -18,7 +18,7 @@ library(geiger)
 
 ##### Modify Trait Data For Analysis 
 ```{r Data Input and Prep}
-raw_traits <- read_csv("./Data/sev_all_traits_Nov2018.csv") %>%
+raw_traits <- read_csv("../Data/All Traits/sev_all_traits_Jan2020.csv") %>%
   
   # just not sure about this ID, plust not much data
   filter(! kartez %in% c("DAJA?")) %>% 
@@ -169,7 +169,7 @@ brl_transform <- function(x, # a tibble or data frame with trait data
     
   }) 
   
-  names(pic.grafen) <- paste("Grafen: power = ", lambdas, sep="")
+  names(pic.grafen) <- paste("Grafen: power = ", rhos, sep="")
   
   # Ornstein-Uhlenbeck transformations
   alphas <- c(.01, .05, .1, .25, .5, .75, 1, 2)
@@ -259,17 +259,26 @@ for(trait in trait_names) {
 
 ```{r Chose Transformations}
 
+
 # manually chosen transformations
-trans <- c(2, 2, 2, 2, 2, 2, 28, 2, 2, 3, 2, 2, 2, 25, 2, 2, 21, 
-           3, 24, 3, 3, 2, 2, 3, 3, 2, 26, 3, 2, 2, 2, 2, 2, 4, 
-           3, 2, 2, 2, 28, 28, 2, 3, 2 )
+trans <- c(a_p=3, area=3, avg.height_A=3, avg.height_B=3, avg.height_C=2, 
+           avg.height_F=2, avg.height_G=28, avg.height_P=2, cn=2, d13C=3, 
+           d15N=2, F_A_BM_cv=2, F_B_BM_cv=28, F_C_BM_cv=24, F_F_BM_cv=2,
+           F_G_BM_cv=2, F_P_BM_cv=21, fr.dens= 3, fr.diam=3, fr.dmc=3,
+           fr.srl=3, ldmc=2, lma=4, max.height_A=3, max.height_B=3, 
+           max.height_C=2, max.height_F=2, max.height_G=3, max.height_P=2,
+           p95.height_A=2, p95.height_B=2, p95.height_C=2, p95.height_F=2, 
+           p95.height_G=4, p95.height_P=2, pC=2, pN=2, rdens=2, rdmc=28, 
+           sdens=2, sdmc=2, seed_mass=3, sla=2)
 
 # ugg, some faff to associate correct transformation with choice from 
 # output figures
-names <- names(all_traits)[15:57]
-names(trans) <- names[order(names)]
+#names <- names(all_traits)[15:57]
+#names(trans) <- names[order(names)]
 
-trans_options <- names(all_trans)[order(names(all_trans))]
+trans_options <- names(brl_transform(x=all_traits, trait="a_p",
+               read.tree("Data/sev_traits_tree101.tre"), 
+               taxa = "taxon.new"))[order(names(all_trans))]
 
 # perform all transformations for traits of interest, then select
 # manually chosen option and combine into one long list
