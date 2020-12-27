@@ -11,3 +11,5 @@ all_pics_corr.png
 pca_corr.png
 pca_importance.png
 Figures/
+*.html
+*.pdf
