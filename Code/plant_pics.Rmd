@@ -116,7 +116,7 @@ pics <- function(x, # a tibble or data frame with trait data
       select(node, pic=contrasts, pic_abs, var=variance, sd)
     
     return(pic.out)
-    
+    #return(pruned)
 }
 
 ```

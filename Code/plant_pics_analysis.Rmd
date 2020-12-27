@@ -18,21 +18,39 @@ library(pls)
 ```{r Load Data}
 
 # all pics data
-pd <- read_csv(file = "./Data/all_pics_joined.csv") %>%
-  mutate_at(vars(node), function(x) as.character(as.numeric(word(x, 2, 2))))
+pd <- read_csv(file = "~/Dropbox/Projects/Sev/Plants/sev_traits_cv_manuscript/Data/all_pics_joined.csv") %>%
+  mutate_at(vars(node), function(x) as.character(as.numeric(word(x, 2, 2)))) %>%
+  mutate(index = -1 * (a_p + cn + fr.diam + ldmc + lma + rdmc + sdmc + seed_mass)) 
 
 pd_long <- pd %>%
-  gather(key = "trait", value = "pic", a_p:d15N, fr.dens:sla)
+  gather(key = "trait", value = "pic", a_p:d15N, fr.dens:index)
 
 ```
 
 
 
-```{r Quick Regression Stats}
 
+```{r Quick Regression Stats}
+f.list <- names(pd)[c(2:3, 10, 19:24, 28, 34, 39:43, 45)]
+
+# OLS linear regression
 pees <- c(lapply(setNames(f.list, f.list), function(x) {
   
  summary(lm(F_F_BM_cv ~ pic, data=pd_long %>% filter(trait==x)))$coefficients[2, 4]
+  
+}), recursive=TRUE)
+
+sigs <- ifelse(pees > 0.10, "", 
+               ifelse(pees > 0.05, "#",
+                      ifelse(pees > 0.01, "*", 
+                             ifelse(pees > 0.001, "**", "***"))))
+
+reg_out <- tibble(trait=names(pees), p=pees, sig=sigs)
+
+# OLS quadratic regression
+pees <- c(lapply(setNames(f.list, f.list), function(x) {
+  
+ summary(lm(F_F_BM_cv ~ pic + I(pic^2), data=pd_long %>% filter(trait==x)))$coefficients[3, 4]
   
 }), recursive=TRUE)
 
@@ -96,17 +114,24 @@ pd_cull <- pd %>%
   #transmute_all(.funs=function(x) scale(x)) %>%
   filter(complete.cases(.))
 
+pls_fit <- plsr(F_A_BM_cv ~ ., data=pd_cull, validation="CV")
+
+cv = RMSEP(pls_fit)
+best.dims = which.min(cv$val[estimate = "adjCV", , ]) - 1
+
 pls_fit <- plsr(F_A_BM_cv ~ ., data=pd_cull)
 
-summary(lm(pd_cull$F_A_BM_cv ~ pls_fit$scores[,4]))
+summary(lm(pd_cull$F_A_BM_cv ~ pls_fit$scores[,1] + pls_fit$scores[,2] + pls_fit$scores[,5]))
 
+lapply(1:ncol(pls_fit$scores), function(x) summary(lm(pd_cull$F_A_BM_cv ~ pls_fit$scores[,x]))$coefficients[2,4])
+pls_fit$loadings
 pd_cull <- pd_cull %>%
   bind_cols(pls_fit$scores)
 ggplot() +
   
 ```
 
-```{r}
+```{r PCA}
 pd_pca <- complete_pd %>%
   select(-F_A_BM_cv) %>%
   as.matrix() %>%
@@ -128,6 +153,11 @@ pd_pca_2 %>%
   # filter(between(cv, -1.5, 2)) %>%
   ggpairs()
 
+# plot PCA space and color points by CV
+pd_pca_2 %>%
+  ggplot(aes(x=PC1, y=PC2)) + 
+  geom_point(aes(color=cv))
+
 pd_pca_2 %>%
   filter(between(cv, -1.5, 2)) %>%
   lm(cv ~ PC1 + PC2, data=.) %>%
@@ -137,6 +167,31 @@ pd_pca$rotation
 
 
 ```
+
+```{r NMDS}
+library(MASS)
+
+d <- pd %>% select(-F_A_BM_cv) %>%
+  as.data.frame() %>%
+  dist()
+
+fit <- cmdscale(d, k=2)
+nm_fit <- MASS::isoMDS(d, k=2)
+
+as_tibble(nm_fit$points) %>%
+  bind_cols(pd %>% select(F_A_BM_cv)) %>%
+  select(dim1=V1, dim2=V2, CV=F_A_BM_cv) %>%
+  
+ggplot(aes(x=dim1, y=dim2, color=CV)) + 
+  geom_point()
+  
+
+
+
+
+
+```
+
 
 
 
