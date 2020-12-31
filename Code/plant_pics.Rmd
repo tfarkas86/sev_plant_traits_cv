@@ -38,6 +38,8 @@ raw_traits <- read_csv("~/Dropbox/Projects/Sev/Plants/Data/All Traits/sev_all_tr
   # group by plant species
   group_by(kartez) 
 
+load("~/Dropbox/Projects/Sev/Plants/sev_traits_cv_manuscript/Data/raw_bounce_wide.RData")
+
 all_traits <- 
   # now there are duplicate kartez codes, so summarize
   inner_join(raw_traits %>% summarize_at(vars(family:apgf, -a_p), funs(max)),
