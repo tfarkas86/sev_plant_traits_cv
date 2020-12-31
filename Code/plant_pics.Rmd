@@ -216,7 +216,7 @@ pics.ldmc <- brl_transform(x=all_traits, trait=trait, phy=read.tree("Data/sev_tr
 
 # get all trait names
 trait_names <- all_traits %>%
-  select(a_p:F_P_BM_cv) %>%
+  select(a_p:F_P_BM_q1090) %>%
   names()
 
 # loop through names to create diagnostic transformation plots
@@ -227,7 +227,7 @@ for(trait in trait_names) {
   # get pics for all transformations
   trait_pics <- brl_transform(x=all_traits, trait=trait, 
                               taxa = "taxon.new",
-                              phy=read.tree("Data/sev_traits_tree101.tre"))
+                              phy=read.tree("~/Dropbox/Projects/Sev/Plants/sev_traits_cv_manuscript/Data/sev_traits_tree101.tre"))
   
   # bind to single data frame
   trait.pics.df <- do.call(rbind, trait_pics) 
@@ -251,7 +251,7 @@ for(trait in trait_names) {
               cex = 3, col="red")
   
   # write to disk
-  ggsave(filename = paste("Figures/pic_trans_diagnostics_", trait, ".pdf", 
+  ggsave(filename = paste("~/Dropbox/Projects/Sev/Plants/sev_traits_cv_manuscript/Figures/pic_trans_diagnostics_", trait, ".pdf", 
                           sep=""),
          device="pdf", height = 14, width=14)
   
@@ -271,23 +271,26 @@ trans <- c(a_p=3, area=3, avg.height_A=3, avg.height_B=3, avg.height_C=2,
            max.height_C=2, max.height_F=2, max.height_G=3, max.height_P=2,
            p95.height_A=2, p95.height_B=2, p95.height_C=2, p95.height_F=2, 
            p95.height_G=4, p95.height_P=2, pC=2, pN=2, rdens=2, rdmc=28, 
-           sdens=2, sdmc=2, seed_mass=3, sla=2)
+           sdens=2, sdmc=2, seed_mass=3, sla=2, 
+           F_A_BM_q1090=3, F_B_BM_q1090=2, F_C_BM_q1090=2, 
+           F_F_BM_q1090=3, F_G_BM_q1090=2, F_P_BM_q1090=3)
 
 # ugg, some faff to associate correct transformation with choice from 
 # output figures
-#names <- names(all_traits)[15:57]
-#names(trans) <- names[order(names)]
+names <- names(all_traits)[15:63]
+names(trans) <- names[order(names)]
 
 trans_options <- names(brl_transform(x=all_traits, trait="a_p",
-               read.tree("Data/sev_traits_tree101.tre"), 
-               taxa = "taxon.new"))[order(names(all_trans))]
+               read.tree("~/Dropbox/Projects/Sev/Plants/sev_traits_cv_manuscript/Data/sev_traits_tree101.tre"), 
+               taxa = "taxon.new"))
+trans_options <- trans_options[order(trans_options)]
 
 # perform all transformations for traits of interest, then select
 # manually chosen option and combine into one long list
 all_pics_list <- setNames(lapply(names(trans), function(t) {
   
  all_trans <- brl_transform(x=all_traits, trait=t,
-               read.tree("Data/sev_traits_tree101.tre"), 
+               read.tree("~/Dropbox/Projects/Sev/Plants/sev_traits_cv_manuscript/Data/sev_traits_tree101.tre"), 
                taxa = "taxon.new")
  all_trans[[trans_options[trans[t]]]]
  
@@ -305,7 +308,7 @@ all_pics_tib <- lapply(names(all_pics_list), function(t) {
 }) %>%
   reduce(full_join, by="node")
 
-write_csv(all_pics_tib, "./Data/all_pics_joined.csv")
+write_csv(all_pics_tib, "~/Dropbox/Projects/Sev/Plants/sev_traits_cv_manuscript/Data/all_pics_joined_31Dec2020.csv")
 
 
 
