@@ -15,7 +15,7 @@ library(tidyverse)
 ##### Biomass and CV
 ```{r Input/Modify/Explore Raw Biomass Data}
 ## Input raw data
-  ab.raw <- read_csv("../Data/Sevilleta_allbiomass_28Jan2018.csv", 
+  ab.raw <- read_csv("~/Dropbox/Projects/Sev/Plants/sev_traits_cv_manuscript/Data/Sevilleta_allbiomass_28Jan2018.csv", 
                      col_types=cols(transect = col_character(),
                                     year = col_integer(), 
                                     web = col_character(), 
@@ -120,7 +120,7 @@ ggplot(aes(x=biomass.BIM, fill=set)) +
 ```
 
 ```{r Make CV data}
-# vc for each unique quad-season-kartez
+# cv for each unique quad-season-kartez
 temp_cv_quad <- ab %>%
   
   # filter out quads with inconsistent sampling
@@ -169,6 +169,55 @@ temp_cv_quad <- ab %>%
   # gather metrics of bounciness
   gather(key="bounce_type", value="bounce", cv, acor, acov, acv)
 ```
+
+```{r get inter-decile range}
+# cv for each unique quad-season-kartez
+temp_cv_quad <- ab %>%
+  
+  # filter out quads with inconsistent sampling
+  semi_join(start_end %>%
+              filter(min_year < 2004, 
+                     max_year >= 2017), 
+            by=c("site", "web", "plot", "quad")) %>%
+  
+  # restrict sampling years
+  filter(between(year, 2003, 2017)) %>% 
+
+  # fill implicit missing values with explicit 0s, 
+  # but only for quads with at least one instance of a species
+  # to avoid filling 0s for all years -> CV = NaN
+  complete(nesting(year, year_char), 
+           nesting(kartez, season, site, web, plot, quad, quad_id), 
+           fill=list(biomass.BM=0, biomass.BIM= 0)) %>%
+  
+  # sum biomass for each kartez for each quad sampling
+  group_by(year, year_char, season, site, web, plot, quad, quad_id, kartez) %>%
+  summarize(density_BM = sum(biomass.BM) ,
+            density_BIM = sum(biomass.BIM)) %>%
+  
+  # regroup by season, site, web, plot, quad, quad_id, kartez
+  ungroup() %>% group_by(season, site, web, plot, quad, quad_id, kartez) %>%
+  
+  # gather two density measures
+  rename(BM=density_BM, BIM=density_BIM) %>%
+  gather(key = "allometry", value="density", BM, BIM) %>%
+  
+  # calculate bounciness for all season, kartez, quad combination
+  ungroup() %>% 
+  group_by(season, site, web, plot, quad, quad_id, kartez, allometry) %>%
+  summarize(cv = sd(density)/mean(density), # coefficient of variation
+            # interdecile range 
+            q1090 = quantile(density, 0.9) - quantile(density, 0.1),
+            # autocorrelation of 1-year lag
+            n_zero = sum(density == 0), # number of zero densities 
+            dens_mean = mean(density)) %>% # mean
+  filter(n_zero < 15) %>%
+  ungroup() %>%
+  
+  # gather metrics of bounciness
+  gather(key="bounce_type", value="bounce", cv, q1090)
+```
+
 
 ```{r Aggregate bounciness for unique season-site-kartez}
 temp_cv <- temp_cv_quad %>%
@@ -253,6 +302,93 @@ temp_wide <- temp_cv %>%
   spread(key="key", value="bounce") %>%
   
   arrange(kartez)
+
+```
+
+```{r Aggregate bounciness for unique season-site-kartez: q1090}
+temp_cv <- temp_cv_quad %>%
+  
+  # filter for focal bounce metrics
+  filter(bounce_type %in% c("cv", "q1090")) %>%
+  
+  # group to aggregate quads
+  group_by(season, site, kartez, allometry, bounce_type) %>%
+  
+  # get mean of bounce and other aggregate stats
+  summarize(bounce = mean(bounce),
+            n_zero_mean = mean(n_zero), 
+            dens_mean = mean(dens_mean), 
+            n_quads = n()) %>%
+  
+  arrange(desc(bounce_type), allometry) %>%
+  ungroup() %>%
+  
+  # concatenate with all-sites and flats-only aggregations
+  bind_rows(., 
+            
+            # all sites
+            temp_cv_quad %>%
+              
+              # filter for focal bounce metrics
+              filter(bounce_type %in% c("cv", "q1090")) %>%
+              
+              # group to aggregate quads
+              group_by(season, kartez, allometry, bounce_type) %>%
+              
+              # get mean of bounce and other aggregate stats
+              summarize(bounce = mean(bounce),
+                        n_zero_mean = mean(n_zero), 
+                        dens_mean = mean(dens_mean), 
+                        n_quads = n()) %>%
+              
+              # add site = "A"
+              mutate(site = "A") %>%
+              
+              arrange(desc(bounce_type), allometry) %>%
+              ungroup(),
+            
+            # flats only
+            temp_cv_quad %>%
+              
+              # filter for focal bounce metrics and remove PJ
+              filter(bounce_type %in% c("cv", "q1090"),
+                     site != "P") %>%
+              
+              # group to aggregate quads
+              group_by(season, kartez, allometry, bounce_type) %>%
+              
+              # get mean of bounce and other aggregate stats
+              summarize(bounce = mean(bounce),
+                        n_zero_mean = mean(n_zero), 
+                        dens_mean = mean(dens_mean), 
+                        n_quads = n()) %>%
+              
+              # add site == "F"
+              mutate(site = "F") %>%
+              
+              arrange(desc(bounce_type), allometry) %>%
+              ungroup())
+
+
+# write out widened file for PICs
+temp_wide <- temp_cv %>% 
+  
+  # cv & q1090, Fall, and BM onlyonly
+  filter(season == "F", 
+         allometry == "BM") %>%
+  
+  # make temp column for spread
+  mutate(key = paste(season, site, allometry, bounce_type, sep="_")) %>%
+  
+  # keep only spreading variables
+  select(kartez, key, bounce) %>%
+  
+  # widen for 1 metric per column
+  spread(key="key", value="bounce") %>%
+  
+  arrange(kartez)
+
+save(temp_wide, file = "~/Dropbox/Projects/Sev/Plants/sev_traits_cv_manuscript/Data/raw_bounce_wide.RData")
 
 ```
 

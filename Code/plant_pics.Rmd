@@ -18,7 +18,7 @@ library(geiger)
 
 ##### Modify Trait Data For Analysis 
 ```{r Data Input and Prep}
-raw_traits <- read_csv("../Data/All Traits/sev_all_traits_Jan2020.csv") %>%
+raw_traits <- read_csv("~/Dropbox/Projects/Sev/Plants/Data/All Traits/sev_all_traits_Jan2020.csv") %>%
   
   # just not sure about this ID, plust not much data
   filter(! kartez %in% c("DAJA?")) %>% 
