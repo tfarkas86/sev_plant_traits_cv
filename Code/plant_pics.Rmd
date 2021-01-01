@@ -38,7 +38,7 @@ raw_traits <- read_csv("~/Dropbox/Projects/Sev/Plants/Data/All Traits/sev_all_tr
   # group by plant species
   group_by(kartez) 
 
-load("~/Dropbox/Projects/Sev/Plants/sev_traits_cv_manuscript/Data/raw_bounce_wide.RData")
+load("~/Dropbox/Projects/Sev/Plants/sev_traits_cv_manuscript/Data/raw_bounce_wide_q1090m.RData")
 
 all_traits <- 
   # now there are duplicate kartez codes, so summarize
@@ -219,6 +219,12 @@ trait_names <- all_traits %>%
   select(a_p:F_P_BM_q1090) %>%
   names()
 
+# just variance metrics
+trait_names <- all_traits %>%
+  select(F_A_BM_cv:F_P_BM_q1090) %>%
+  names()
+
+
 # loop through names to create diagnostic transformation plots
 for(trait in trait_names) {
   
@@ -272,8 +278,8 @@ trans <- c(a_p=3, area=3, avg.height_A=3, avg.height_B=3, avg.height_C=2,
            p95.height_A=2, p95.height_B=2, p95.height_C=2, p95.height_F=2, 
            p95.height_G=4, p95.height_P=2, pC=2, pN=2, rdens=2, rdmc=28, 
            sdens=2, sdmc=2, seed_mass=3, sla=2, 
-           F_A_BM_q1090=3, F_B_BM_q1090=2, F_C_BM_q1090=2, 
-           F_F_BM_q1090=3, F_G_BM_q1090=2, F_P_BM_q1090=3)
+           F_A_BM_q1090=2, F_B_BM_q1090=29, F_C_BM_q1090=29, 
+           F_F_BM_q1090=2, F_G_BM_q1090=2, F_P_BM_q1090=2)
 
 # ugg, some faff to associate correct transformation with choice from 
 # output figures
@@ -308,7 +314,7 @@ all_pics_tib <- lapply(names(all_pics_list), function(t) {
 }) %>%
   reduce(full_join, by="node")
 
-write_csv(all_pics_tib, "~/Dropbox/Projects/Sev/Plants/sev_traits_cv_manuscript/Data/all_pics_joined_31Dec2020.csv")
+write_csv(all_pics_tib, "~/Dropbox/Projects/Sev/Plants/sev_traits_cv_manuscript/Data/all_pics_joined_1Jan2021.csv")
 
 
 

@@ -206,8 +206,11 @@ temp_cv_quad <- ab %>%
   ungroup() %>% 
   group_by(season, site, web, plot, quad, quad_id, kartez, allometry) %>%
   summarize(cv = sd(density)/mean(density), # coefficient of variation
-            # interdecile range 
-            q1090 = quantile(density, 0.9) - quantile(density, 0.1),
+            # mean corrected interdecile range
+            q90 = quantile(density, .9), 
+            q10 = quantile(density, .1), 
+            qdiff = quantile(density, 0.9) - quantile(density, 0.1),
+            q1090 = (quantile(density, 0.9) - quantile(density, 0.1)) / mean(density),
             # autocorrelation of 1-year lag
             n_zero = sum(density == 0), # number of zero densities 
             dens_mean = mean(density)) %>% # mean
@@ -388,7 +391,7 @@ temp_wide <- temp_cv %>%
   
   arrange(kartez)
 
-save(temp_wide, file = "~/Dropbox/Projects/Sev/Plants/sev_traits_cv_manuscript/Data/raw_bounce_wide.RData")
+save(temp_wide, file = "~/Dropbox/Projects/Sev/Plants/sev_traits_cv_manuscript/Data/raw_bounce_wide_q1090m.RData")
 
 ```
 

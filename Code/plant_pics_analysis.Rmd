@@ -38,7 +38,7 @@ f.list <- names(pd)[c(2:3, 10, 25:30, 37, 45:49)]
 # OLS linear regression
 pees <- c(lapply(setNames(f.list, f.list), function(x) {
   
- summary(lm(F_F_BM_cv ~ pic, data=pd_long %>% filter(trait==x)))$coefficients[2, 4]
+ summary(lm(F_F_BM_q1090 ~ pic, data=pd_long %>% filter(trait==x)))$coefficients[2, 4]
   
 }), recursive=TRUE)
 
@@ -70,7 +70,7 @@ a.list <- names(pd)[c(2:3, 10, 25:30, 37, 45:49)]
 
 pd_long %>%  
   filter(trait %in% a.list) %>%
-  ggplot(mapping=aes(y=F_A_BM_cv, x=pic)) +
+  ggplot(mapping=aes(y=F_A_BM_q1090, x=pic)) +
   geom_point() + 
   geom_smooth(method="lm") +
   facet_wrap(~ trait, scales="free")
@@ -95,6 +95,16 @@ ggsave(filename = "~/Dropbox/Projects/Sev/Plants/sev_traits_cv_manuscript/Figure
          device="pdf", height = 14, width=14)
 
 ```
+
+```{r cv vs q1090}
+pd %>% 
+  ggplot(mapping=aes(x = F_F_BM_cv, y = F_F_BM_q1090)) +
+  geom_point() + 
+  geom_smooth(method = "loess")
+
+ggsave(filename = "~/Dropbox/Projects/Sev/Plants/sev_traits_cv_manuscript/Figures/cv_vs_q1090.pdf")
+```
+
 
 ```{r Explore Data}
 pd %>%
