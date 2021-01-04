@@ -19,7 +19,7 @@ library(tidymodels)
 ```{r Load Data}
 
 # all pics data
-pd <- read_csv(file = "~/Dropbox/Projects/Sev/Plants/sev_traits_cv_manuscript/Data/all_pics_joined_31Dec2020.csv") %>%
+pd <- read_csv(file = "~/Dropbox/Projects/Sev/Plants/sev_traits_cv_manuscript/Data/all_pics_joined_1Jan2021.csv") %>%
   mutate_at(vars(node), function(x) as.character(as.numeric(word(x, 2, 2)))) %>%
   mutate(index = -1 * (a_p + cn + fr.diam + ldmc + lma + rdmc + sdmc + seed_mass)) %>%
   mutate(avc = a_p - cn )
@@ -91,7 +91,7 @@ pd_long %>%
   geom_label(aes(label=node), cex=2) +
   geom_smooth(method="loess") 
 
-ggsave(filename = "~/Dropbox/Projects/Sev/Plants/sev_traits_cv_manuscript/Figures/loess_reg_flats_q1090.pdf", 
+ggsave(filename = "~/Dropbox/Projects/Sev/Plants/sev_traits_cv_manuscript/Figures/loess_reg_flats_q1090m.pdf", 
          device="pdf", height = 14, width=14)
 
 ```
@@ -102,7 +102,7 @@ pd %>%
   geom_point() + 
   geom_smooth(method = "loess")
 
-ggsave(filename = "~/Dropbox/Projects/Sev/Plants/sev_traits_cv_manuscript/Figures/cv_vs_q1090.pdf")
+ggsave(filename = "~/Dropbox/Projects/Sev/Plants/sev_traits_cv_manuscript/Figures/cv_vs_q1090m.pdf")
 ```
 
 
@@ -222,7 +222,7 @@ cv = RMSEP(pls.model)
 best.dims = which.min(cv$val[estimate = "adjCV", , ]) - 1
 
 pls.model <- 
-  pd %>%
+  pd %>%r
   select(a_p, area, cn, F_F_BM_cv, fr.srl, fr.diam, ldmc, lma,
          p95.height_F, rdens, sdmc, seed_mass) %>%
   plsr(F_F_BM_cv ~ ., data = ., ncomp = best.dims)
@@ -243,7 +243,43 @@ truth <- pd %>%
 
 summary(lm(pd$F_F_BM_cv[pd$F_F_BM_cv <2] ~ preds[preds < 1]))
 
+summary(pls.model)
 
+## principal components regression
+train <- sample(1:55, replace=FALSE, size = 40)
+pcr.train <- 
+  pd %>%
+  select(a_p, area, cn, F_F_BM_cv, fr.srl, fr.diam, ldmc, lma,
+         p95.height_F, rdens, sdmc, seed_mass) %>%
+  drop_na() %>%
+  slice(train)
+pcr.test <- 
+  pd %>%
+  select(a_p, area, cn, F_F_BM_cv, fr.srl, fr.diam, ldmc, lma,
+         p95.height_F, rdens, sdmc, seed_mass) %>%
+  drop_na() %>%
+  slice(-train)
+
+pcr.model <- plsr(F_F_BM_cv ~ ., data = pcr.train, validation = "LOO")
+
+predict(pcr.model, newdata = pcr.test)
+
+predplot(pcr.model, newdata = pcr.test)
+  
+```
+
+```{r ranger}
+rf.data <- pd %>%
+  select(a_p, area, cn, F_F_BM_cv, fr.srl, fr.diam, ldmc, lma,
+         p95.height_F, rdens, sdmc, seed_mass) %>%
+  drop_na() 
+
+
+rf.mod <- train(y = rf.data$F_F_BM_cv, x = rf.data %>% 
+        select(-F_F_BM_cv), 
+      method = "gbm")
+
+rf.mod
 ```
 
 
