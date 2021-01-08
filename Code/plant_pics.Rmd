@@ -320,6 +320,100 @@ write_csv(all_pics_tib, "~/Dropbox/Projects/Sev/Plants/sev_traits_cv_manuscript/
 
 ```
 
+## Drop rare species
+```{r}
+# get ranked list of zeros
+zranks <- temp_cv %>%
+  filter(site == "F", 
+         allometry == "BM", 
+         season == "F", 
+         bounce_type == "cv") %>%
+  mutate(zrank = 100-rank(n_zero_mean)) %>%
+  select(kartez, zrank) 
+
+# join in rank to all traits data
+all_traits2 <- all_traits %>%
+  left_join(zranks) %>%
+  select(kartez, zrank, family:last_col()) %>%
+  drop_na(zrank)
+
+ranks <- unique(zranks$zrank)[order(unique(zranks$zrank))]
+tree <- read.tree("~/Dropbox/Projects/Sev/Plants/sev_traits_cv_manuscript/Data/sev_traits_tree101.tre")
+
+# loop through species rareness
+rare_list <- lapply(ranks[1:30], function(rank) {
+
+all_pics_list <- setNames(lapply(names(trans), function(t) {
+  
+ all_trans <- brl_transform(x=all_traits2 %>% filter(zrank >= rank), 
+                            trait=t, phy=tree,
+               taxa = "taxon.new")
+ all_trans[[trans_options[trans[t]]]]
+ 
+ }
+ 
+ ), names(trans))
+
+# join all traits together
+
+all_pics_tib <- lapply(names(all_pics_list), function(t) {
+  
+  all_pics_list[[t]] %>%
+    select(node, 
+           !!t:= pic)
+}) %>%
+  reduce(full_join, by="node")
+
+return(all_pics_tib)
+
+}) %>% setNames(ranks[1:30])
+
+save(rare_list,file= "~/Dropbox/Projects/Sev/Plants/sev_traits_cv_manuscript/Data/rare_list.RData")
+
+# create analyss
+pd <- rare_list[[1]] %>%
+mutate_at(vars(node), function(x) as.character(as.numeric(word(x, 2, 2)))) %>%
+  mutate(index = -1 * (a_p + cn + fr.diam + ldmc + lma + rdmc + sdmc + seed_mass)) %>%
+  mutate(avc = a_p - cn )
+
+pd_long <- pd %>%
+  gather(key = "trait", value = "pic", a_p:d15N, fr.dens:index)
+
+f.list <- names(pd)[c(2:3, 10, 25:30, 37, 45:49)]
+
+##
+
+pees <- c(lapply(setNames(f.list, f.list), function(x) {
+  
+ summary(lm(F_F_BM_q1090 ~ pic, data=pd_long %>% filter(trait==x)))$coefficients[2, 4]
+  
+}), recursive=TRUE)
+
+sigs <- ifelse(pees > 0.10, "", 
+               ifelse(pees > 0.05, "#",
+                      ifelse(pees > 0.01, "*", 
+                             ifelse(pees > 0.001, "**", "***"))))
+
+reg_out <- tibble(trait=names(pees), p=pees, sig=sigs)
+
+##
+
+pd_long %>%  
+  filter(trait %in% f.list) %>%
+  ggplot(mapping=aes(y=F_F_BM_q1090, x=pic)) +
+  geom_point() + 
+    facet_wrap(~ trait, scales="free") +
+  geom_text(data = reg_out, 
+              aes(x=Inf, y=Inf, label=reg_out$sig,
+                  vjust=1, hjust=1),
+              cex = 5, col="red") +
+  geom_label(aes(label=node), cex=2) +
+  geom_smooth(method="loess") +
+  ggtitle(paste("rank = ", ranks[1]))
+
+```
+
+
 
 
 

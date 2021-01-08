@@ -218,7 +218,7 @@ temp_cv_quad <- ab %>%
   ungroup() %>%
   
   # gather metrics of bounciness
-  gather(key="bounce_type", value="bounce", cv, q1090)
+  pivot_longer(cols=c(cv, q1090), names_to="bounce_type", values_to = "bounce")
 ```
 
 
@@ -392,6 +392,79 @@ temp_wide <- temp_cv %>%
   arrange(kartez)
 
 save(temp_wide, file = "~/Dropbox/Projects/Sev/Plants/sev_traits_cv_manuscript/Data/raw_bounce_wide_q1090m.RData")
+
+```
+
+## Evaluate q1090 vs. zero-inflation
+```{r get q1090 and zero inflation}
+# cv for each unique quad-season-kartez
+q1090_diog <- ab %>%
+  
+  # filter out quads with inconsistent sampling
+  semi_join(start_end %>%
+              filter(min_year < 2004, 
+                     max_year >= 2017), 
+            by=c("site", "web", "plot", "quad")) %>%
+  
+  # restrict sampling years
+  filter(between(year, 2003, 2017)) %>% 
+
+  # fill implicit missing values with explicit 0s, 
+  # but only for quads with at least one instance of a species
+  # to avoid filling 0s for all years -> CV = NaN
+  complete(nesting(year, year_char), 
+           nesting(kartez, season, site, web, plot, quad, quad_id), 
+           fill=list(biomass.BM=0, biomass.BIM= 0)) %>%
+  
+  # sum biomass for each kartez for each quad sampling
+  # why is this being done? no big effect though ... a loss of like 100 records
+  group_by(year, year_char, season, site, web, plot, quad, quad_id, kartez) %>%
+  summarize(density_BM = sum(biomass.BM) ,
+            density_BIM = sum(biomass.BIM)) %>%
+  
+  # regroup by season, site, web, plot, quad, quad_id, kartez
+  # to summarize by year
+  ungroup() %>% group_by(season, site, web, plot, quad, quad_id, kartez) %>%
+  
+  # gather two density measures
+  rename(BM=density_BM, BIM=density_BIM) %>%
+  gather(key = "allometry", value="density", BM, BIM) %>%
+  
+  # filter out BIM for diagnositcs. it doesn't get used
+  filter(allometry == "BM") %>%
+  
+  # calculate bounciness for all season, kartez, quad combination
+  ungroup() %>% 
+  group_by(season, site, web, plot, quad, quad_id, kartez, allometry) %>%
+  summarize(cv = sd(density)/mean(density), # coefficient of variation
+            # mean corrected interdecile range
+            q90 = quantile(density, .9), 
+            q10 = quantile(density, .1), 
+            qdiff = quantile(density, 0.9) - quantile(density, 0.1),
+            q1090 = (quantile(density, 0.9) - quantile(density, 0.1)) / mean(density),
+            #q1090 = (quantile(density, 0.9) - quantile(density, 0.1)) ,
+            n_zero = sum(density == 0), # number of zero densities 
+            dens_mean = mean(density)) %>% # mean
+  
+  # filter out very very rare species
+  filter(n_zero < 14) %>%
+  ungroup() %>%
+  pivot_longer(cols=c(cv, q1090), names_to="metric") %>%
+  filter(season == "S", site %in% c("B", "C", "G")) %>%
+  group_by(kartez, metric) %>%
+  summarize(bounce_mean = mean(value), 
+            zero_mean = mean(n_zero))
+  
+temp_cv %>%
+  filter(site == "F", 
+         allometry == "BM", 
+         season == "S") %>%
+  ggplot(aes(x = n_zero_mean, y = bounce)) + 
+  geom_point() + 
+  geom_smooth(method = "loess") + 
+  facet_wrap(~ bounce_type, scales="free")
+
+ggsave(filename = "~/Dropbox/Projects/Sev/Plants/sev_traits_cv_manuscript/Figures/zeros_vs_cv_q1090m.pdf")
 
 ```
 
