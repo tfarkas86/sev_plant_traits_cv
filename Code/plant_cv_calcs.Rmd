@@ -458,7 +458,7 @@ q1090_diog <- ab %>%
 temp_cv %>%
   filter(site == "F", 
          allometry == "BM", 
-         season == "S") %>%
+         season == "F") %>%
   ggplot(aes(x = n_zero_mean, y = bounce)) + 
   geom_point() + 
   geom_smooth(method = "loess") + 

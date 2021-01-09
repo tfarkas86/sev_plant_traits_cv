@@ -328,24 +328,34 @@ zranks <- temp_cv %>%
          allometry == "BM", 
          season == "F", 
          bounce_type == "cv") %>%
-  mutate(zrank = 100-rank(n_zero_mean)) %>%
-  select(kartez, zrank) 
+  mutate(zrank = rank(14-n_zero_mean)) %>%
+  left_join(eval(.) %>%
+              group_by(zrank) %>%
+              summarize(nsp=n()) %>%
+  mutate(nexclude1 = cumsum(nsp), 
+         nexclude = lag(nexclude1)) %>%
+  mutate(across(nexclude, .f = ~ ifelse(is.na(.x), 0, .x))) %>%
+  select(zrank, nexclude), 
+by = "zrank") %>%
+  arrange(nexclude) %>%
+select(kartez, nexclude) 
 
 # join in rank to all traits data
 all_traits2 <- all_traits %>%
   left_join(zranks) %>%
-  select(kartez, zrank, family:last_col()) %>%
-  drop_na(zrank)
+  select(kartez, nexclude, family:last_col()) %>%
+  drop_na(nexclude)
 
-ranks <- unique(zranks$zrank)[order(unique(zranks$zrank))]
+ranks <- unique(zranks$nexclude)[order(unique(zranks$nexclude))]
 tree <- read.tree("~/Dropbox/Projects/Sev/Plants/sev_traits_cv_manuscript/Data/sev_traits_tree101.tre")
 
+inranks <- ranks[1:20]
 # loop through species rareness
-rare_list <- lapply(ranks[1:30], function(rank) {
+rare_list <- lapply(inranks, function(rank) {
 
 all_pics_list <- setNames(lapply(names(trans), function(t) {
   
- all_trans <- brl_transform(x=all_traits2 %>% filter(zrank >= rank), 
+ all_trans <- brl_transform(x=all_traits2 %>% filter(nexclude >= rank), 
                             trait=t, phy=tree,
                taxa = "taxon.new")
  all_trans[[trans_options[trans[t]]]]
@@ -366,12 +376,16 @@ all_pics_tib <- lapply(names(all_pics_list), function(t) {
 
 return(all_pics_tib)
 
-}) %>% setNames(ranks[1:30])
+}) %>% setNames(inranks)
 
 save(rare_list,file= "~/Dropbox/Projects/Sev/Plants/sev_traits_cv_manuscript/Data/rare_list.RData")
 
-# create analyss
-pd <- rare_list[[1]] %>%
+# loop through z_nero mean rank, do analysis, and plot
+walk(.x = as.character(inranks), .f = ~ {
+  
+print(.x)
+  
+pd <- rare_list[[.x]] %>%
 mutate_at(vars(node), function(x) as.character(as.numeric(word(x, 2, 2)))) %>%
   mutate(index = -1 * (a_p + cn + fr.diam + ldmc + lma + rdmc + sdmc + seed_mass)) %>%
   mutate(avc = a_p - cn )
@@ -381,7 +395,7 @@ pd_long <- pd %>%
 
 f.list <- names(pd)[c(2:3, 10, 25:30, 37, 45:49)]
 
-##
+## regression
 
 pees <- c(lapply(setNames(f.list, f.list), function(x) {
   
@@ -396,7 +410,7 @@ sigs <- ifelse(pees > 0.10, "",
 
 reg_out <- tibble(trait=names(pees), p=pees, sig=sigs)
 
-##
+# graph traits vs q1090
 
 pd_long %>%  
   filter(trait %in% f.list) %>%
@@ -409,7 +423,38 @@ pd_long %>%
               cex = 5, col="red") +
   geom_label(aes(label=node), cex=2) +
   geom_smooth(method="loess") +
-  ggtitle(paste("rank = ", ranks[1]))
+  ggtitle(paste("rank = ", .x))
+
+ggsave(paste("~/Dropbox/Projects/Sev/Plants/sev_traits_cv_manuscript/Figures/nzero_diagnostics/q1090_vs_traits/q1010_reg_flats_nzero_", .x, ".pdf", sep=""), height=14, width = 14)
+
+# graph traits vs cv
+pd_long %>%  
+  filter(trait %in% f.list) %>%
+  ggplot(mapping=aes(y=F_F_BM_cv, x=pic)) +
+  geom_point() + 
+    facet_wrap(~ trait, scales="free") +
+  geom_text(data = reg_out, 
+              aes(x=Inf, y=Inf, label=reg_out$sig,
+                  vjust=1, hjust=1),
+              cex = 5, col="red") +
+  geom_label(aes(label=node), cex=2) +
+  geom_smooth(method="loess") +
+  ggtitle(paste("rank = ", .x))
+
+ggsave(paste("~/Dropbox/Projects/Sev/Plants/sev_traits_cv_manuscript/Figures/nzero_diagnostics/cv_vs_traits/cv_reg_flats_nzero_", .x, ".pdf", sep=""), height=14, width = 14)
+
+# graph cv vs q1090
+pd_long %>%  
+  filter(trait %in% f.list) %>%
+  ggplot(mapping=aes(y=F_F_BM_cv, x=F_F_BM_q1090)) +
+  geom_point() + 
+  geom_smooth(method="loess") +
+  ggtitle(paste("rank = ", .x))
+
+ggsave(paste("~/Dropbox/Projects/Sev/Plants/sev_traits_cv_manuscript/Figures/nzero_diagnostics/q1090_vs_cv/q1090_vs_cv_flats_nzero_", .x, ".pdf", sep=""), height=7, width = 7)
+
+}
+)
 
 ```
 
