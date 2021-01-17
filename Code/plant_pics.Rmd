@@ -458,6 +458,160 @@ ggsave(paste("~/Dropbox/Projects/Sev/Plants/sev_traits_cv_manuscript/Figures/nze
 
 ```
 
+### Significance tables drop rare species
+```{r}
+# 1. loop over linear, quadratic, and cubit fits
+##  2. loop over rarity-based species sets
+###    3. loop over traits
+####    4. fit model 
+###    5. make traits list of models
+##  4. make species-set list of models
+# 5. make fit list of models
+# 6. loop over fit list (n = 3)
+##  7. recursively unlist (fully flatten)
+##  8. extract p-value and r-square from each model 
+##  9. ggarrange traits as cols, species sets as rows
+
+## alternative
+# 1. get list of data frames containing rarity-based species sets
+# 2. for each species set:
+##  3. 
+
+load("~/Dropbox/Projects/Sev/Plants/sev_traits_cv_manuscript/Data/rare_list.RData")
+
+# list of trait indices
+f.list <- names(pd)[c(2:3, 10, 25:30, 37, 45:49)]
+
+# loop to get list of models
+map(c("linear", "quadratic", "cubic"), .f = function(fit) {
+  
+  map(as.character(inranks[1:2]), function(set) {
+    
+    pd_long <- rare_list[[set]] %>%
+    mutate_at(vars(node), 
+              function(x) as.character(as.numeric(word(x, 2, 2)))) %>%
+    mutate(index = -1 * (a_p + cn + fr.diam + ldmc + lma + rdmc + sdmc + seed_mass)) %>%
+    mutate(avc = a_p - cn ) %>%
+    gather(key = "trait", value = "pic", a_p:d15N, fr.dens:index)
+    
+    map(c("cv", "q1090"), function(metric) {
+      
+      map(f.list[1:2], function(trait) {
+        
+        paste(trait, metric, fit)
+        form_str <- switch(as.character(fit), 
+                           "linear" = paste0("F_F_BM_", metric,
+                                        " ~ pic"), 
+                           "quadratic" = paste0("F_F_BM_", metric, 
+                                        " ~ pic + I(pic^2)"), 
+                           "cubic" = paste0("F_F_BM_", metric, 
+                                        " ~ pic + I(pic^2) + I(pic^3)"))
+        lm(formula(form_str), 
+            data=pd_long %>% filter(trait==trait))
+        
+      }) %>% set_names(f.list[1:2])
+    }) %>% set_names(c("cv", "q1090"))
+  }) %>% set_names(as.character(inranks[1:2]))
+}) %>% set_names(c("linear", "quadratic", "cubic"))
+
+walk(.x = as.character(inranks), .f = ~ {
+  
+print(.x)
+  
+pd <- rare_list[[.x]] %>%
+mutate_at(vars(node), function(x) as.character(as.numeric(word(x, 2, 2)))) %>%
+  mutate(index = -1 * (a_p + cn + fr.diam + ldmc + lma + rdmc + sdmc + seed_mass)) %>%
+  mutate(avc = a_p - cn )
+
+pd_long <- pd %>%
+  gather(key = "trait", value = "pic", a_p:d15N, fr.dens:index)
+
+f.list <- names(pd)[c(2:3, 10, 25:30, 37, 45:49)]
+
+## regressions
+# cv
+
+cv_mods <- c(lapply(setNames(f.list, f.list), function(x) {
+  
+ lm(F_F_BM_cv ~ pic, 
+            data=pd_long %>% filter(trait==x))
+  
+}), recursive=FALSE)
+
+cv_pees <- c(map(cv_mods, ~ summary(.x)$coefficients[2, 4]), 
+              recursive=TRUE)
+
+cv_sigs <- ifelse(cv_pees > 0.10, "", 
+               ifelse(cv_pees > 0.05, "#",
+                      ifelse(cv_pees > 0.01, "*", 
+                             ifelse(cv_pees > 0.001, "**", "***"))))
+
+cv_r2 <- c(map(cv_mods, ~ summary(.x)$adj.r.squared), recursive = TRUE)
+
+# q1090
+q1090_mods <- c(lapply(setNames(f.list, f.list), function(x) {
+  
+ lm(F_F_BM_q1090 ~ pic, 
+            data=pd_long %>% filter(trait==x))
+  
+}), recursive=FALSE)
+
+q1090_pees <- c(map(q1090_mods, ~ summary(.x)$coefficients[2, 4]), 
+              recursive=TRUE)
+
+q1090_sigs <- ifelse(q1090_pees > 0.10, "", 
+               ifelse(q1090_pees > 0.05, "#",
+                      ifelse(q1090_pees > 0.01, "*", 
+                             ifelse(q1090_pees > 0.001, "**", "***"))))
+
+q1090_r2 <- c(map(q1090_mods, ~ summary(.x)$adj.r.squared), recursive = TRUE)
+
+# graph traits vs q1090
+
+pd_long %>%  
+  filter(trait %in% f.list) %>%
+  ggplot(mapping=aes(y=F_F_BM_q1090, x=pic)) +
+  geom_point() + 
+    facet_wrap(~ trait, scales="free") +
+  geom_text(data = reg_out, 
+              aes(x=Inf, y=Inf, label=reg_out$sig,
+                  vjust=1, hjust=1),
+              cex = 5, col="red") +
+  geom_label(aes(label=node), cex=2) +
+  geom_smooth(method="loess") +
+  ggtitle(paste("rank = ", .x))
+
+ggsave(paste("~/Dropbox/Projects/Sev/Plants/sev_traits_cv_manuscript/Figures/nzero_diagnostics/q1090_vs_traits/q1010_reg_flats_nzero_", .x, ".pdf", sep=""), height=14, width = 14)
+
+# graph traits vs cv
+pd_long %>%  
+  filter(trait %in% f.list) %>%
+  ggplot(mapping=aes(y=F_F_BM_cv, x=pic)) +
+  geom_point() + 
+    facet_wrap(~ trait, scales="free") +
+  geom_text(data = reg_out, 
+              aes(x=Inf, y=Inf, label=reg_out$sig,
+                  vjust=1, hjust=1),
+              cex = 5, col="red") +
+  geom_label(aes(label=node), cex=2) +
+  geom_smooth(method="loess") +
+  ggtitle(paste("rank = ", .x))
+
+ggsave(paste("~/Dropbox/Projects/Sev/Plants/sev_traits_cv_manuscript/Figures/nzero_diagnostics/cv_vs_traits/cv_reg_flats_nzero_", .x, ".pdf", sep=""), height=14, width = 14)
+
+# graph cv vs q1090
+pd_long %>%  
+  filter(trait %in% f.list) %>%
+  ggplot(mapping=aes(y=F_F_BM_cv, x=F_F_BM_q1090)) +
+  geom_point() + 
+  geom_smooth(method="loess") +
+  ggtitle(paste("rank = ", .x))
+
+ggsave(paste("~/Dropbox/Projects/Sev/Plants/sev_traits_cv_manuscript/Figures/nzero_diagnostics/q1090_vs_cv/q1090_vs_cv_flats_nzero_", .x, ".pdf", sep=""), height=7, width = 7)
+
+}
+)
+```
 
 
 
