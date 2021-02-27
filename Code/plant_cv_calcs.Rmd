@@ -22,7 +22,9 @@ setwd("~/Dropbox/1_Work/1_Research/Whitney-Rudgers Lab/Sev/Plants/sev_traits_cv_
                                     web = col_character(), 
                                     quad = col_character())) # guessed logical
 
-## modify data
+## create core biomass datas et for all sites, seasons, and species. 
+## both allometries are included (BM and BIM)
+## 0s are filled for all quads where no plants are recorded.
 ab <- ab.raw %>%
   filter(substr(site, 1, 4) == "core", treatment == "C") %>% # core sites only
   mutate(year_char =  paste("y", year, sep="")) %>% # make year values character
@@ -62,7 +64,15 @@ ab <- ab.raw %>%
                      max_year >= 2017), 
             by=c("site", "web", "plot", "quad")) %>%
   filter(between(year, 2003, 2017)) %>% # restrict sampling years
-
+  
+  
+  # Due to species pooling (ie, SPORO, ASTRA are multiple species), 
+  # sum biomass for each kartez for each quad sampling
+  group_by(year, year_char, season, site, web, plot, quad, quad_id, kartez) %>%
+  summarize(across(biomass.BM, sum),
+            across(biomass.BIM, sum)) %>%
+  ungroup() %>%
+  
   # fill implicit missing values with explicit 0s, 
   # but only for quads with at least one instance of a species
   # to avoid filling 0s for all years -> CV = NaN
@@ -70,7 +80,6 @@ ab <- ab.raw %>%
            nesting(kartez, season, site, web, plot, quad, quad_id), 
            fill=list(biomass.BM=0, biomass.BIM= 0))
   
-
 ```
 
 ```{r Biomass Exploration}
@@ -93,7 +102,7 @@ setdiff(levels(quad.raw$Species), sp.raw$kartez)
 
 ```
 
-```{r Identify Skipped Quads}
+```{r Identify Skipped Quads, eval = FALSE, include = FALSE}
 
 # fill in all year*quad combinations with no data as 0s
 # get first and last year containing data for each quad
@@ -145,14 +154,11 @@ ggplot(aes(x=biomass.BIM, fill=set)) +
 
 ```
 
-```{r Make CV data}
+```{r calculate bounciness metrics}
 # cv for each unique quad-season-kartez
 temp_cv_quad <- ab %>%
   
-  # sum biomass for each kartez for each quad sampling
-  group_by(year, year_char, season, site, web, plot, quad, quad_id, kartez) %>%
-  summarize(density_BM = sum(biomass.BM) ,
-            density_BIM = sum(biomass.BIM)) %>%
+
   
   # regroup by season, site, web, plot, quad, quad_id, kartez
   ungroup() %>% group_by(season, site, web, plot, quad, quad_id, kartez) %>%
