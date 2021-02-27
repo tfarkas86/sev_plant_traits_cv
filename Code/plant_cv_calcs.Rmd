@@ -9,13 +9,14 @@ editor_options:
 
 library(tidyverse)
 
+setwd("~/Dropbox/1_Work/1_Research/Whitney-Rudgers Lab/Sev/Plants/sev_traits_cv_manuscript/")
 ```
 
 
 ##### Biomass and CV
 ```{r Input/Modify/Explore Raw Biomass Data}
 ## Input raw data
-  ab.raw <- read_csv("~/Dropbox/Projects/Sev/Plants/sev_traits_cv_manuscript/Data/Sevilleta_allbiomass_28Jan2018.csv", 
+  ab.raw <- read_csv("./Data/Sevilleta_allbiomass_28Jan2018.csv", 
                      col_types=cols(transect = col_character(),
                                     year = col_integer(), 
                                     web = col_character(), 
