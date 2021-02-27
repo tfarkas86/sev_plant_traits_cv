@@ -154,31 +154,78 @@ ggplot(aes(x=biomass.BIM, fill=set)) +
 
 ```
 
+```{r Define bounce functions}
+
+# scaled quantile range
+quantileRange <- function(x, low = .1, high = .9) {
+  (quantile(x, low) - quantile(x, high)) / mean(density)
+}
+
+# coefficient of variation
+coeffVar <- function(x) sd(biomass)/mean(biomass)
+
+# metrics based on analysis of slopes
+slopeMetrics <- function(x, radians = TRUE) {
+  
+  ## peak counting
+  diffs <- c(NA, diff(x)) # get first difference
+  # test for change in sign of slope and add all negatives
+  npks <- sum(diffs * lag(diffs) < 0, na.rm = TRUE)
+  ppks <- npks / (length(x) - 2) # proportion of total possible peaks
+  
+  ## change in slopes
+  # average of absolute difference in slopes
+  absSlpDiff <- mean(diff(diffs), na.rm=TRUE)
+  # average of percent change in slope 
+  pctSlpDiff <- mean(abs(diff(diffs)/lead(diffs)[-length(diffs)]), na.rm=TRUE)
+  
+  ## change in angle
+  # average absolute change in angle
+  angDiffMean <- mean(abs(diff(atan(diffs))), na.rm=TRUE) * ifelse(radians, 1, 180/pi)
+  # proportion of total possible change in angle
+  angDiffPro <- sum(abs(diff(atan(diffs))), na.rm=TRUE) / (pi * (length(x) - 1))
+
+  list(npks, ppks, 
+       absSlpDiff, pctSlpDiff, 
+       angDiff)
+
+}
+
+
+  
+
+
+
+```
+
+
 ```{r calculate bounciness metrics}
 # cv for each unique quad-season-kartez
 temp_cv_quad <- ab %>%
-  
-
   
   # regroup by season, site, web, plot, quad, quad_id, kartez
   ungroup() %>% group_by(season, site, web, plot, quad, quad_id, kartez) %>%
   
   # gather two density measures
-  rename(BM=density_BM, BIM=density_BIM) %>%
-  gather(key = "allometry", value="density", BM, BIM) %>%
+  rename(BM=biomass.BM, BIM=biomass.BIM) %>%
+  pivot_longer(BM:BIM, names_to = "allometry", values_to="biomass") #%>%
   
   # calculate bounciness for all season, kartez, quad combination
+  # for each allometry independently
   ungroup() %>% 
   group_by(season, site, web, plot, quad, quad_id, kartez, allometry) %>%
-  summarize(cv = sd(density)/mean(density), # coefficient of variation
+  summarize(cv = coeffVar(biomass), # coefficient of variation
+            npeaks = nPeaks(biomass, prop=FALSE), 
+            ppeaks = nPeaks(biomass), 
             # autocorrelation of 1-year lag
-            acor = acf(density, plot=FALSE, lag.max=1,
+            acor = acf(biomass, plot=FALSE, lag.max=1,
                        type="correlation")$acf[2], 
-            acov = acf(density, plot=FALSE, lag.max=1,
+            acov = acf(biomass, plot=FALSE, lag.max=1,
                        type="covariance")$acf[2],
-            acv = acv(density),
-            n_zero = sum(density == 0), # number of zero densities 
-            dens_mean = mean(density)) %>% # mean
+            acv = acv(biomass),
+            q1090 = (quantile(biomass, 0.9) - quantile(density, 0.1)) / mean(density),
+            n_zero = sum(biomass == 0), # number of zero densities 
+            biomass_mean = mean(biomass)) %>% # mean
   filter(n_zero < 15) %>%
   ungroup() %>%
   
