@@ -26,32 +26,57 @@ setwd("~/Dropbox/1_Work/1_Research/Whitney-Rudgers Lab/Sev/Plants/sev_traits_cv_
 ab <- ab.raw %>%
   filter(substr(site, 1, 4) == "core", treatment == "C") %>% # core sites only
   mutate(year_char =  paste("y", year, sep="")) %>% # make year values character
+  
   # change and aggregate species when kartez change, or are difficult to identify
-  mutate_at(vars(kartez), 
-            funs(ifelse(. %in% c("ARDI5", "ARPU9"), "ARIST", 
-                        ifelse(. %in% c("SPCO4", "SPFL2", "SPCR"), "SPORO", 
-                               ifelse(. == "OESU3", "GACO5", 
-                                      ifelse(. == "OESUN", "GASUN", 
-                                             ifelse(. == "DYGR", "CHGR2", 
-                                                    ifelse(. %in% c("ASFE2", "ASNU4", "ASTRA"), "ASTRA", .)))))))) %>%
-  mutate_at(vars(site), # recode sites to simplify
-            funs(recode(., "core_black" = "G", "core_creosote" = "C", 
+  mutate(across(kartez, 
+            ~ ifelse(.x %in% c("ARDI5", "ARPU9"), "ARIST", 
+                        ifelse(.x %in% c("SPCO4", "SPFL2", "SPCR"), "SPORO", 
+                               ifelse(.x == "OESU3", "GACO5", 
+                                      ifelse(.x == "OESUN", "GASUN", 
+                                             ifelse(.x == "DYGR", "CHGR2", 
+                                                    ifelse(.x %in% c("ASFE2", "ASNU4", "ASTRA"), "ASTRA", .)))))))) %>%
+  mutate(across(site, # recode sites to simplify
+            ~recode(.x, "core_black" = "G", "core_creosote" = "C", 
                             "core_blue" = "B", "core_PJ" = "P" ))) %>%
-  mutate_at(vars(season), # recode seasons to simplify
-            funs(recode(., "fall" = "F", "spring" = "S"))) %>%
-  mutate_at(vars(web), funs(ifelse(site == "P", transect, .))) %>%
+  mutate(across(season, # recode seasons to simplify
+            ~ recode(.x, "fall" = "F", "spring" = "S"))) %>%
+  mutate(across(web, ~ ifelse(site == "P", transect, .x))) %>%
   mutate(quad_id = paste(site, web, plot, quad, sep="_")) %>%
   select(site, year, year_char, season:quad, quad_id, kartez,
          biomass.BM:biomass.BIM,
          -treatment, -block, -subplot, -transect, -date) %>%
-  droplevels() # reset factor levels
+  droplevels() %>%  # reset factor levels
+  
+  # filter out quads with inconsistent sampling
+  semi_join(eval(.) %>%
+              filter(season == "F") %>%
+              group_by(year, site, web, plot, quad) %>%
+              summarize(n_records = n()) %>%
+              ungroup() %>%
+              complete(year, nesting(site, web, plot, quad), fill=list(n_records = 0)) %>%
+              filter(n_records > 0) %>%
+              group_by(site, web, plot, quad) %>%
+              summarize(min_year = min(year), 
+                        max_year = max(year)) %>%
+              filter(min_year < 2004, 
+                     max_year >= 2017), 
+            by=c("site", "web", "plot", "quad")) %>%
+  filter(between(year, 2003, 2017)) %>% # restrict sampling years
+
+  # fill implicit missing values with explicit 0s, 
+  # but only for quads with at least one instance of a species
+  # to avoid filling 0s for all years -> CV = NaN
+  complete(nesting(year, year_char), 
+           nesting(kartez, season, site, web, plot, quad, quad_id), 
+           fill=list(biomass.BM=0, biomass.BIM= 0))
+  
 
 ```
 
 ```{r Biomass Exploration}
 
 ## match with traits species
-sp.raw <- read_csv("../Data/sev_all_traits_Nov2018.csv") %>% 
+sp.raw <- read_csv("./Data/sev_all_traits_Nov2018.csv") %>% 
   mutate_at(vars(kartez), funs(as_factor(.)))
 
 quad.raw <- read_csv("~/Dropbox/Projects/Sev/Plants/Data/Biomass/NPP_quad_20181105.csv") %>% 
@@ -123,22 +148,6 @@ ggplot(aes(x=biomass.BIM, fill=set)) +
 ```{r Make CV data}
 # cv for each unique quad-season-kartez
 temp_cv_quad <- ab %>%
-  
-  # filter out quads with inconsistent sampling
-  semi_join(start_end %>%
-              filter(min_year < 2004, 
-                     max_year >= 2017), 
-            by=c("site", "web", "plot", "quad")) %>%
-  
-  # restrict sampling years
-  filter(between(year, 2003, 2017)) %>% 
-
-  # fill implicit missing values with explicit 0s, 
-  # but only for quads with at least one instance of a species
-  # to avoid filling 0s for all years -> CV = NaN
-  complete(nesting(year, year_char), 
-           nesting(kartez, season, site, web, plot, quad, quad_id), 
-           fill=list(biomass.BM=0, biomass.BIM= 0)) %>%
   
   # sum biomass for each kartez for each quad sampling
   group_by(year, year_char, season, site, web, plot, quad, quad_id, kartez) %>%
