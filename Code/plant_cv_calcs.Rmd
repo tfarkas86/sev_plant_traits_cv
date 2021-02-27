@@ -158,44 +158,47 @@ ggplot(aes(x=biomass.BIM, fill=set)) +
 
 # scaled quantile range
 quantileRange <- function(x, low = .1, high = .9) {
-  (quantile(x, low) - quantile(x, high)) / mean(density)
+  (quantile(x, low) - quantile(x, high)) / mean(x)
 }
 
 # coefficient of variation
-coeffVar <- function(x) sd(biomass)/mean(biomass)
+coeffVar <- function(x) sd(x)/mean(x)
 
 # metrics based on analysis of slopes
 slopeMetrics <- function(x, radians = TRUE) {
   
-  ## peak counting
   diffs <- c(NA, diff(x)) # get first difference
-  # test for change in sign of slope and add all negatives
+  corrDiffs <- diffs/mean(x)
+  ## peak counting
+    # test for change in sign of slope and add all negatives
   npks <- sum(diffs * lag(diffs) < 0, na.rm = TRUE)
   ppks <- npks / (length(x) - 2) # proportion of total possible peaks
   
   ## change in slopes
   # average of absolute difference in slopes
   absSlpDiff <- mean(diff(diffs), na.rm=TRUE)
+  corrAbsSlpDiff <- mean(diff(corrDiffs), na.rm=TRUE)
   # average of percent change in slope 
   pctSlpDiff <- mean(abs(diff(diffs)/lead(diffs)[-length(diffs)]), na.rm=TRUE)
+  corrPctSlpDiff <- mean(abs(diff(corrDiffs)/lead(diffs)[-length(diffs)]), na.rm=TRUE)
   
   ## change in angle
   # average absolute change in angle
   angDiffMean <- mean(abs(diff(atan(diffs))), na.rm=TRUE) * ifelse(radians, 1, 180/pi)
+  corrAngDiffMean <- mean(abs(diff(atan(corrDiffs))), na.rm=TRUE) * ifelse(radians, 1, 180/pi)
   # proportion of total possible change in angle
   angDiffPro <- sum(abs(diff(atan(diffs))), na.rm=TRUE) / (pi * (length(x) - 1))
+  corrAngDiffPro <- sum(abs(diff(atan(corrDiffs))), na.rm=TRUE) / (pi * (length(x) - 1))
 
-  list(npks, ppks, 
-       absSlpDiff, pctSlpDiff, 
-       angDiff)
+  list(npks = npks, ppks = ppks, 
+       absSlopDiff = absSlpDiff,  corrAbsSlpDiff = corrAbsSlpDiff,
+       pctSlpDiff = pctSlpDiff, corrPctSlpDiff = corrPctSlpDiff, 
+       angDiffMean = angDiffMean, corrAngDiffMean = corrAngDiffMean, 
+       angDiffPro = angDiffPro, corrAngDiffPro = corrAngDiffPro)
 
 }
 
-
-  
-
-
-
+slopeMetrics(x)
 ```
 
 
