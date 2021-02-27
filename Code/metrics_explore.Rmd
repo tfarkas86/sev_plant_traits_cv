@@ -1,0 +1,73 @@
+---
+title: "metrics_explore"
+author: "Tim Farkas"
+date: "1/18/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Scenarios
+```{r}
+# flat
+ggplot() +
+  geom_point() + 
+  geom_abline(slope = 0, intercept = 10, color = 1) +
+  geom_abline(slope = 0, intercept = 5, color = 2) + 
+  geom_abline(slope = 0, intercept = 15, color = 3) + 
+  xlim(0, 20) + 
+  ylim(0, 200)
+
+# "bouncy"
+ggplot() + 
+  geom_line(aes(x = 0:19, y = rep(c(0, 5), 10)), color = 1) + 
+  geom_line(aes(x = 0:19, y = rep(c(10, 15), 10)), color = 2) + 
+  geom_line(aes(x = 0:19, y = rep(c(0, 10), 10)), color = 3) + 
+  geom_line(aes(x = 0:19, y = rep(c(10, 20), 10)), color = 4) +            
+  ylim(0, 20) + 
+  ylab("biomass") + 
+  xlab("year")
+
+# less bouncy but regular
+ggplot() + 
+  geom_line(aes(x = 0:19, y = rep(c(0, 0, 5, 5), 5)), color = 1) + 
+  geom_line(aes(x = 0:19, y = rep(c(10, 10, 15, 15), 5)), color = 2) + 
+  geom_line(aes(x = 0:19, y = rep(c(0, 0, 10, 10), 5)), color = 3) + 
+  geom_line(aes(x = 0:19, y = rep(c(10, 10, 20, 20), 5)), color = 4) +          
+  ylim(0, 20) + 
+  ylab("biomass") + 
+  xlab("year")
+
+# hockey stick 
+ggplot() + 
+  geom_line(aes(x = 0:19, y = c(rep(0, 10), rep(5, 10))), color = 1) + 
+  geom_line(aes(x = 0:19, y = c(rep(5, 10), rep(20, 10))), color = 2) + 
+  ylim(0, 20) + 
+  ylab("biomass") + 
+  xlab("year")
+
+# hockey bounce
+ggplot() + 
+  geom_line(aes(x = 0:19, y = c(rep(0, 10), rep(5, 10)) + c(0, 2)), color = 1) + 
+  geom_line(aes(x = 0:19, y = c(rep(5, 10), rep(18, 10)) + c(0, 2)), color = 2) +
+  ylim(0, 20) + 
+  ylab("biomass") + 
+  xlab("year")
+
+
+# hockey stick vs. bounce 
+ggplot() + 
+  geom_line(aes(x = 0:19, y = c(rep(0, 10), rep(10, 10))), color = 1) + 
+  geom_line(aes(x = 0:19, y = rep(c(0, 10), 10)), color = 2) + 
+  ylim(0, 10) + 
+  ylab("biomass") + 
+  xlab("year")
+
+var(c(rep(0, 10), rep(10, 10))) / mean(c(rep(0, 10), rep(10, 10)))
+var(rep(c(0, 10), 10)) / mean(rep(c(0, 10), 10))
+
+
+```
+

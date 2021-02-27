@@ -378,7 +378,8 @@ return(all_pics_tib)
 
 }) %>% setNames(inranks)
 
-save(rare_list,file= "~/Dropbox/Projects/Sev/Plants/sev_traits_cv_manuscript/Data/rare_list.RData")
+save(rare_list, 
+     file= "~/Dropbox/Projects/Sev/Plants/sev_traits_cv_manuscript/Data/rare_list.RData")
 
 # loop through z_nero mean rank, do analysis, and plot
 walk(.x = as.character(inranks), .f = ~ {
@@ -514,9 +515,9 @@ map(c("linear", "quadratic", "cubic"), .f = function(fit) {
               filter(trait==trt))
         r2 <- summary(mod)$adj.r.squared
         return(list(model = mod, data = mod$model,
-                    formula = formula(switch(as.character(fit), 
-                                             "linear" = "y ~ x", 
-                                             "quadratic" = "y ~ x + I(x^2)", 
+                    formula = formula(switch(as.character(fit),
+                                             "linear" = "y ~ x",
+                                             "quadratic" = "y ~ x + I(x^2)",
                                              "cubic" = "y ~ x + I(x^2) + I(x^3)")),
                     adj.r2 = summary(mod)$adj.r.squared,
                     trait = trt, metric = metric,
@@ -529,6 +530,57 @@ map(c("linear", "quadratic", "cubic"), .f = function(fit) {
 }) %>% set_names(c("linear", "quadratic", "cubic"))
 
 # 
+ modtest <- mod_list %>%
+  map(~ .x %>%
+        map(~ .x %>% transpose)) %>%
+  map(~ .x %>% transpose) %>%
+  transpose %>%
+  map(~ .x %>% transpose) %>%
+  map(~ .x %>%
+        map(~.x %>% transpose)) %>%
+  map(~.x %>%
+  unlist(recursive = FALSE)) %>%
+   map(~.x %>% unlist(r = FALSE))
+   
+ 
+ ggs <- 
+  modtest %>%
+     map(~ .x %>%
+        map(~ {
+          gg2 <- .x$data %>%
+              rename(x = 1, y = 2) %>%
+              ggplot(aes(x, y)) + 
+              geom_point(size = 5) + 
+              stat_smooth(method = "lm", formula = .x$formula) + 
+              xlab(names(.x$data)[1]) + 
+              ylab(.x$trait) + 
+              ggtitle(paste0("n_spp: ", nrow(.x$data), 
+                             "; R-sq: ", round(.x$adj.r2, 2))) + 
+              theme(text = element_text(size = 30))  
+          gg_list <- list(gg = gg2, meta = .x$trait)
+         return(gg_list) 
+        }
+            )
+      ) %>%
+   map(~ .x %>% transpose)
+ 
+ ggs %>% 
+  walk(~ {
+    ga <- .x %>%
+      grid.arrange(grobs = .$gg,
+                   top=text_grob(.$meta[[1]], size = 50),
+                   ncol = 6)
+    ggsave(plot = ga, 
+           filename = paste0("~/Dropbox/Projects/",
+                                        "Sev/Plants/sev_traits_cv_manuscript/",
+                                        "Figures/nzero_diognostics_wstats_trait/",
+                                        .x$meta[[1]], ".pdf"), 
+           width = 40, height = 40, limitsize = FALSE)
+  }
+  )
+  
+### something not right with species removal. too many nodes. 
+### old stuff
 
 modtest <- map(mod_list, ~ .x %>% transpose) %>% 
   #transpose %>% 
