@@ -165,7 +165,7 @@ quantileRange <- function(x, low = .1, high = .9) {
 coeffVar <- function(x) sd(x)/mean(x)
 
 # metrics based on analysis of slopes
-slopeMetrics <- function(x, radians = TRUE) {
+slopeMetrics <- function(x,  rtn = NULL, radians = TRUE) {
   
   diffs <- c(NA, diff(x)) # get first difference
   corrDiffs <- diffs/mean(x)
@@ -190,15 +190,44 @@ slopeMetrics <- function(x, radians = TRUE) {
   angDiffPro <- sum(abs(diff(atan(diffs))), na.rm=TRUE) / (pi * (length(x) - 1))
   corrAngDiffPro <- sum(abs(diff(atan(corrDiffs))), na.rm=TRUE) / (pi * (length(x) - 1))
 
-  list(npks = npks, ppks = ppks, 
-       absSlopDiff = absSlpDiff,  corrAbsSlpDiff = corrAbsSlpDiff,
+ allmetrics <-  list(npks = npks, ppks = ppks, 
+       absSlpDiff = absSlpDiff,  corrAbsSlpDiff = corrAbsSlpDiff,
        pctSlpDiff = pctSlpDiff, corrPctSlpDiff = corrPctSlpDiff, 
        angDiffMean = angDiffMean, corrAngDiffMean = corrAngDiffMean, 
        angDiffPro = angDiffPro, corrAngDiffPro = corrAngDiffPro)
+  
+ return(allmetrics[[rtn]])
+  
 
 }
 
-slopeMetrics(x)
+slopeMetrics(x, rtn="absSlpDiff")
+```
+
+```{r metrics explore}
+set.seed(1234)
+map(c(5, 10), function(mu) {
+  map(c(5, 10), function(var) {
+    x <- map_dbl(1:10, function(i) {
+      x <- rnorm(15, mu, var)
+      c(slopeMetrics(x)$angDiffMean, 
+        slopeMetrics(x)$corrAngDiffMean)
+    }) 
+    mean(x)
+  }) %>% set_names(c("var = 5", "var = 10"))
+}) %>% set_names(c("mean = 5", "mean = 10"))
+
+mu = 5
+var = 10
+map(c(5, 10), function(mu) {
+map(1:100, function(i) {
+      x <- rnorm(15, mu, var)
+      c(adm = slopeMetrics(x)$angDiffMean, 
+        cadm = slopeMetrics(x)$corrAngDiffMean)
+    }) %>% 
+  bind_rows() %>% 
+  summarize(across(.fns = sd))
+}) %>% set_names(c("mean = 5", "mean = 10"))
 ```
 
 
@@ -211,7 +240,7 @@ temp_cv_quad <- ab %>%
   
   # gather two density measures
   rename(BM=biomass.BM, BIM=biomass.BIM) %>%
-  pivot_longer(BM:BIM, names_to = "allometry", values_to="biomass") #%>%
+  pivot_longer(BM:BIM, names_to = "allometry", values_to="biomass") %>%
   
   # calculate bounciness for all season, kartez, quad combination
   # for each allometry independently
@@ -219,21 +248,33 @@ temp_cv_quad <- ab %>%
   group_by(season, site, web, plot, quad, quad_id, kartez, allometry) %>%
   summarize(cv = coeffVar(biomass), # coefficient of variation
             npeaks = nPeaks(biomass, prop=FALSE), 
-            ppeaks = nPeaks(biomass), 
+            ppeaks = nPeaks(biomass),
+            absSlopeDiff = slopeMetrics(biomass, rtn="absSlpDiff"), 
+            corrAbsSlpDiff = slopeMetrics(biomass, "corrAbsSlpDiff"), 
+            pctSlpDiff = slopeMetrics(biomass, "pctSlpDiff"), 
+            corrPctSlpDiff = slopeMetrics(biomass, "corrPctSlpDiff"), 
+            angDiffMean = slopeMetrics(biomass, "angDiffMean"), 
+            corrAngDiffMean = slopeMetrics(biomass, "corrAngDiffMean"), 
+            angDiffPro = slopeMetrics(biomass, "angDiffPro"), 
+            corrAngDiffPro = slopeMetrics(biomass, "corrAngDiffPro"), 
             # autocorrelation of 1-year lag
             acor = acf(biomass, plot=FALSE, lag.max=1,
                        type="correlation")$acf[2], 
             acov = acf(biomass, plot=FALSE, lag.max=1,
                        type="covariance")$acf[2],
-            acv = acv(biomass),
-            q1090 = (quantile(biomass, 0.9) - quantile(density, 0.1)) / mean(density),
+            #acv = acv(biomass),
             n_zero = sum(biomass == 0), # number of zero densities 
             biomass_mean = mean(biomass)) %>% # mean
   filter(n_zero < 15) %>%
-  ungroup() %>%
+  ungroup() #%>%
   
   # gather metrics of bounciness
   gather(key="bounce_type", value="bounce", cv, acor, acov, acv)
+  
+# yes, look at that
+hist(temp_cv_quad %>% 
+       filter(n_zero < 14) %>% 
+       pull(corrAngDiffMean))
 ```
 
 ```{r get inter-decile range}
