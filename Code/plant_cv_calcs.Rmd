@@ -233,7 +233,7 @@ map(1:100, function(i) {
 
 ```{r calculate bounciness metrics}
 # cv for each unique quad-season-kartez
-temp_cv_quad <- ab %>%
+quad_metrics <- ab %>%
   
   # regroup by season, site, web, plot, quad, quad_id, kartez
   ungroup() %>% group_by(season, site, web, plot, quad, quad_id, kartez) %>%
@@ -246,10 +246,11 @@ temp_cv_quad <- ab %>%
   # for each allometry independently
   ungroup() %>% 
   group_by(season, site, web, plot, quad, quad_id, kartez, allometry) %>%
-  summarize(cv = coeffVar(biomass), # coefficient of variation
+  summarize(var = var(biomass), 
+            cv = coeffVar(biomass), # coefficient of variation
             npeaks = nPeaks(biomass, prop=FALSE), 
             ppeaks = nPeaks(biomass),
-            absSlopeDiff = slopeMetrics(biomass, rtn="absSlpDiff"), 
+            absSlpDiff = slopeMetrics(biomass, rtn="absSlpDiff"), 
             corrAbsSlpDiff = slopeMetrics(biomass, "corrAbsSlpDiff"), 
             pctSlpDiff = slopeMetrics(biomass, "pctSlpDiff"), 
             corrPctSlpDiff = slopeMetrics(biomass, "corrPctSlpDiff"), 
@@ -266,68 +267,53 @@ temp_cv_quad <- ab %>%
             n_zero = sum(biomass == 0), # number of zero densities 
             biomass_mean = mean(biomass)) %>% # mean
   filter(n_zero < 15) %>%
-  ungroup() #%>%
-  
-  # gather metrics of bounciness
-  gather(key="bounce_type", value="bounce", cv, acor, acov, acv)
-  
-# yes, look at that
-hist(temp_cv_quad %>% 
-       filter(n_zero < 14) %>% 
-       pull(corrAngDiffMean))
-```
-
-```{r get inter-decile range}
-# cv for each unique quad-season-kartez
-temp_cv_quad <- ab %>%
-  
-  # filter out quads with inconsistent sampling
-  semi_join(start_end %>%
-              filter(min_year < 2004, 
-                     max_year >= 2017), 
-            by=c("site", "web", "plot", "quad")) %>%
-  
-  # restrict sampling years
-  filter(between(year, 2003, 2017)) %>% 
-
-  # fill implicit missing values with explicit 0s, 
-  # but only for quads with at least one instance of a species
-  # to avoid filling 0s for all years -> CV = NaN
-  complete(nesting(year, year_char), 
-           nesting(kartez, season, site, web, plot, quad, quad_id), 
-           fill=list(biomass.BM=0, biomass.BIM= 0)) %>%
-  
-  # sum biomass for each kartez for each quad sampling
-  group_by(year, year_char, season, site, web, plot, quad, quad_id, kartez) %>%
-  summarize(density_BM = sum(biomass.BM) ,
-            density_BIM = sum(biomass.BIM)) %>%
-  
-  # regroup by season, site, web, plot, quad, quad_id, kartez
-  ungroup() %>% group_by(season, site, web, plot, quad, quad_id, kartez) %>%
-  
-  # gather two density measures
-  rename(BM=density_BM, BIM=density_BIM) %>%
-  gather(key = "allometry", value="density", BM, BIM) %>%
-  
-  # calculate bounciness for all season, kartez, quad combination
-  ungroup() %>% 
-  group_by(season, site, web, plot, quad, quad_id, kartez, allometry) %>%
-  summarize(cv = sd(density)/mean(density), # coefficient of variation
-            # mean corrected interdecile range
-            q90 = quantile(density, .9), 
-            q10 = quantile(density, .1), 
-            qdiff = quantile(density, 0.9) - quantile(density, 0.1),
-            q1090 = (quantile(density, 0.9) - quantile(density, 0.1)) / mean(density),
-            # autocorrelation of 1-year lag
-            n_zero = sum(density == 0), # number of zero densities 
-            dens_mean = mean(density)) %>% # mean
-  filter(n_zero < 15) %>%
   ungroup() %>%
   
-  # gather metrics of bounciness
-  pivot_longer(cols=c(cv, q1090), names_to="bounce_type", values_to = "bounce")
+  # pivot to long format on metrics
+  pivot_longer(var:acov, 
+              names_to="metric", values_to="value")
 ```
 
+```{r metric diagnostics}
+quad_metrics %>%
+  filter(n_zero < 13) %>%
+  filter(!metric %in% c("pctSlpDiff", "angDiffPro", 
+                        "corrPctSlpDiff",
+                         "corrAngDiffPro")) %>%
+  mutate(across(metric,
+                ~ fct_relevel(.x, 
+                              "var", "cv", 
+                              "npeaks", "ppeaks",
+                              "absSlpDiff", "corrAbsSlpDiff", 
+                              "angDiffMean", "corrAngDiffMean", 
+                              "acov", "acor"))) %>%
+  ggplot() + 
+  geom_histogram(aes(x=value)) + 
+  facet_wrap(~ metric, ncol = 2, scales = "free")
+
+ggsave("./Figures/metric_histograms.pdf", 
+       width = 14, height = 28)
+
+## relationship with nzero
+quad_metrics %>%
+  filter(n_zero < 13) %>%
+  filter(!metric %in% c("pctSlpDiff", "angDiffPro", 
+                        "corrPctSlpDiff",
+                         "corrAngDiffPro")) %>%
+  mutate(across(metric,
+                ~ fct_relevel(.x, 
+                              "var", "cv", 
+                              "npeaks", "ppeaks",
+                              "absSlpDiff", "corrAbsSlpDiff", 
+                              "angDiffMean", "corrAngDiffMean", 
+                              "acov", "acor"))) %>%
+  ggplot() + 
+  geom_point(aes(x=n_zero, y=value)) + 
+  facet_wrap(~ metric, ncol = 2, scales = "free")
+
+ggsave("./Figures/metric_v_nzero.pdf", 
+       width = 14, height = 28)
+```
 
 ```{r Aggregate bounciness for unique season-site-kartez}
 temp_cv <- temp_cv_quad %>%
